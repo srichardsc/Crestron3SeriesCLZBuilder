@@ -157,13 +157,5 @@ That license grants no rights to Crestron software, trademarks, SDK, firmware,
 formats, or certificates. See [`LICENSE`](LICENSE) and
 [`SECURITY.md`](SECURITY.md).
 
-Do not commit:
-
-- SIMPL Windows, SPlusCC, SIMPL#, or Cresdb DLL/EXE files;
-- `.clz`, `.ush`, or packages produced from a customer installation without
-  reviewing the applicable license;
-- certificates, private keys, PSKs, tokens, secret-bearing dumps, or customer
-  installation paths.
-
 Contributions must preserve the separation between open-source code and the
 proprietary toolchain. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
