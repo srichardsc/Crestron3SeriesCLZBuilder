@@ -15,7 +15,7 @@ not pretend to produce an accepted signed CLZ without those inputs.
 ## What needs a licensed Windows host
 
 - MSBuild against .NET Compact Framework 3.5;
-- SPlusCC compilation of `.usp` modules;
+- SPlusCC, Crestron's SIMPL+ compiler, compiling `.usp` modules;
 - SIMPL# SDK assembly processing;
 - official verification/signing service;
 - deterministic CLZ validation against Cresdb resources;

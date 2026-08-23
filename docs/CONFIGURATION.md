@@ -63,8 +63,9 @@ file selects a different project without copying or changing the builder.
 
 Module, dependency, and resource paths resolve from the configuration
 directory and cannot be absolute or escape with `..`. Modules are optional;
-an empty list builds a DLL/CLZ-only package. When modules exist, `SPlusCC`
-compiles each source separately for every selected target.
+an empty list builds a DLL/CLZ-only package. When modules exist, `SPlusCC`,
+Crestron's SIMPL+ compiler, compiles each source separately for every selected
+target.
 
 Dependency/resource filenames must be unique and cannot collide with the
 assembly DLL/config or `manifest.info`/`manifest.ser`. Standard Crestron helper,

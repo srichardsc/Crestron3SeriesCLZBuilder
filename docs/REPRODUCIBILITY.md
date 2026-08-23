@@ -12,7 +12,7 @@ the result, including:
 
 - Python implementation/version and the runtime modules used by the packager;
 - MSBuild and the Compact Framework compiler/reference assemblies;
-- SPlusCC and SIMPL# compiler/service libraries;
+- SPlusCC, Crestron's SIMPL+ compiler, and SIMPL# compiler/service libraries;
 - Cresdb references and project data;
 - response files and implicit framework targets;
 - the official signer identity expected by the core.

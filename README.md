@@ -13,8 +13,9 @@ values with `--config` or the equivalent `scripts/Build.ps1` parameters.
 
 The final build uses proprietary tools and resources installed on the build
 machine:
-**VS2022/MSBuild**, **.NET Compact Framework 3.5**, **SIMPL Windows/SPlusCC/
-Cresdb**, and the **SIMPL# SDK / SIMPLSharpService**. This repository does not
+**VS2022/MSBuild**, **.NET Compact Framework 3.5**, **SIMPL Windows**, **SPlusCC
+(Crestron's SIMPL+ compiler)**, **Cresdb**, and the **SIMPL# SDK /
+SIMPLSharpService**. This repository does not
 download, copy, redistribute, or recreate those components. It contains no
 certificates, private keys, example PSKs, or homemade signer.
 
@@ -50,9 +51,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 Replace example names with the files in the selected project. If `Setup.ps1`
 reports missing proprietary components, follow
-[`docs/INSTALLATION.md`](docs/INSTALLATION.md). The script cannot accept a
-license, download, or install SIMPL Windows or the Crestron SDK on the user's
-behalf.
+[`docs/INSTALLATION.md`](docs/INSTALLATION.md). Downloading Crestron software,
+SIMPL Windows, SIMPL+, SDKs, or related tools requires an authorized Crestron
+dealer account. The script cannot accept a license, download, or install those
+components on the user's behalf.
 
 ## What gets built
 
@@ -64,13 +66,14 @@ MSBuild → SIMPL# assembly → official verification/signing
         ↓
 deterministic CLZ + manifest + dependencies
         ↓
-SPlusCC per target → 3-Series / 4-Series .USH symbols
+Crestron's SPlusCC SIMPL+ compiler per target → 3-Series / 4-Series .USH symbols
         ↓
 selected output directory
 ```
 
 The assembly and `CLZ` are built once and copied to selected targets. `.USH`
-files are generated separately because `SPlusCC.exe` receives the target. A
+files are generated separately because Crestron's SIMPL+ compiler
+(`SPlusCC.exe`) receives the target.
 A successful build is not hardware acceptance. SIMPL Windows import, firmware,
 Toolbox, reboot, and real operation still need to be checked on a processor.
 
@@ -83,7 +86,7 @@ Toolbox, reboot, and real operation still need to be checked on a processor.
 | Python 3.10+ | reproducible pipeline | public; `Setup.ps1 -InstallOpenSource` can install it |
 | Visual Studio 2022 / MSBuild 17.x | compile the project | Build Tools or VS2022 with MSBuild |
 | .NET Compact Framework 3.5 | CF references and `csc.exe` | legacy/manual installation; not downloaded here |
-| SIMPL Windows + SPlusCC | generate `.USH` | local Crestron installation |
+| SIMPL Windows + SPlusCC (Crestron's SIMPL+ compiler) | generate `.USH` | local Crestron installation |
 | Cresdb / Required References | data, interfaces, dependencies | local Crestron installation |
 | SIMPL# SDK / SIMPLSharpService | compile/verify assembly | local Crestron installation |
 
@@ -126,7 +129,8 @@ selection is recorded by `init` in the configuration file.
 ## Documentation
 
 - [Installation and dependencies](docs/INSTALLATION.md): Windows,
-  VS2022/MSBuild, CF 3.5, SIMPL Windows, SPlusCC, Cresdb, and SIMPL# SDK.
+  VS2022/MSBuild, CF 3.5, SIMPL Windows, SPlusCC (Crestron's SIMPL+ compiler),
+  Cresdb, and SIMPL# SDK.
 - [Build and packaging](docs/BUILD.md): `--config` selection, pipeline,
   options, outputs, and gates.
 - [Driver development](docs/DRIVER-DEVELOPMENT.md): how to write a

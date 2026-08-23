@@ -25,8 +25,8 @@ git diff --check
 For core changes, create a local virtual environment and run the project's
 Python tests. On a licensed Windows host, run `doctor`, verify the lock, then
 run the selected build and (when appropriate) `-VerifyReproducible`. A public
-CI pass does not replace SPlusCC, signing, SIMPL Windows import, or hardware
-acceptance.
+CI pass does not replace SPlusCC (Crestron's SIMPL+ compiler), signing, SIMPL
+Windows import, or hardware acceptance.
 
 ## Pull requests
 

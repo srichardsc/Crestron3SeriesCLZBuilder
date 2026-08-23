@@ -113,8 +113,8 @@ machine paths into the assembly.
 ## 4. Design the SIMPL+ boundary before writing the package
 
 If the driver has a SIMPL+ interface, keep each `.usp` source in the selected
-configuration and give its symbols stable names. The builder compiles every
-selected module once per requested target:
+configuration and give its symbols stable names. Crestron's `SPlusCC` SIMPL+
+compiler builds every selected module once per requested target:
 
 ```json
 {
@@ -166,11 +166,11 @@ Review the output before importing it:
 - package manifests and SHA-256 values validate;
 - the second build produces the same bytes.
 
-The assembly and CLZ are shared. SPlusCC receives the target separately, so
-the `.ush` output is target-specific. A CLZ built through the 3-Series flow can
-therefore be used for a 4-Series output when the processor model, firmware, and
-driver API support it. Confirm that in the acceptance test; do not infer it
-from a successful local build alone.
+The assembly and CLZ are shared. Crestron's SPlusCC SIMPL+ compiler receives
+the target separately, so the `.ush` output is target-specific. A CLZ built
+through the 3-Series flow can therefore be used for a 4-Series output when the
+processor model, firmware, and driver API support it. Confirm that in the
+acceptance test; do not infer it from a successful local build alone.
 
 ## 6. Test on hardware
 

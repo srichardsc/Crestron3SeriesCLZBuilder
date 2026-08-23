@@ -18,11 +18,12 @@ references. `EnableNetFx3` enables the public Windows feature only; it does
 not install Compact Framework references. Put an approved path in the local
 `toolchain.paths` config if VS2022 is installed in a non-standard edition/path.
 
-## `SPlusCC.exe`, SIMPL# SDK, or Cresdb missing
+## `SPlusCC.exe` (Crestron's SIMPL+ compiler), SIMPL# SDK, or Cresdb missing
 
-Install the matching licensed SIMPL Windows/SPlusCC, SIMPL# SDK/
-SIMPLSharpService, and Cresdb release. Re-run the checker. Do not download
-DLLs from a random web site or copy them into this repository. Use local
+Obtain the matching software through an authorized Crestron dealer account and
+install the licensed SIMPL Windows/SPlusCC, SIMPL# SDK/SIMPLSharpService, and
+Cresdb release. Re-run the checker. Do not download DLLs from a random web
+site or copy them into this repository. Use local
 `toolchain.paths` entries for a supported side-by-side installation.
 
 ## Configuration or selector errors
@@ -60,7 +61,7 @@ project's supported toolchain and that the official signer service is present.
 Do not replace it with a self-generated certificate, a homemade signer, or a
 different signing API.
 
-## SPlusCC or CLZ import failure
+## SPlusCC (SIMPL+) or CLZ import failure
 
 Check the external process exit code, target name, generated `.ush` inventory,
 assembly identity, manifest hashes, and CLZ entry structure. Rebuild in clean

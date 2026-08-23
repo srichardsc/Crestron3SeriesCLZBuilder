@@ -109,8 +109,9 @@ The pipeline is deterministic and stops on the first invalid input:
    verified assembly.
 6. Validate package structure, manifest identity, hashes, compression, and
    timestamps before publication.
-7. Run `SPlusCC.exe` independently for each requested target and validate the
-   expected `.ush` inventory and symbol identity.
+7. Run `SPlusCC.exe`, Crestron's SIMPL+ compiler, independently for each
+   requested target and validate the expected `.ush` inventory and symbol
+   identity.
 8. Publish all requested targets transactionally. Preserve a valid prior
    output or a recovery backup if publication/rollback cannot complete.
 

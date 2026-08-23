@@ -40,9 +40,16 @@ toolchain. This repository does not fetch or redistribute it.
 
 ## Proprietary prerequisites
 
-Obtain and install the versions licensed and supported by your organization:
+Downloading Crestron software requires an authorized Crestron dealer account.
+Obtain the versions licensed and supported by your organization through the
+Crestron dealer channel. This includes SIMPL Windows, SIMPL+, SIMPL# SDK,
+Cresdb, firmware tools, and the related signing/service components. This
+repository does not provide download links, licenses, installers, or copied
+vendor binaries.
 
-1. SIMPL Windows, including `SPlusCC.exe`.
+Install the following components on the licensed Windows build host:
+
+1. SIMPL Windows, including `SPlusCC.exe`, Crestron's SIMPL+ compiler.
 2. The matching SIMPL# SDK and `SIMPLSharpService` assemblies.
 3. Cresdb Programming data, including Required References and Required Project
    Files.
@@ -53,7 +60,7 @@ The checker looks for the following standard locations under
 
 | Input | Typical location | Why it matters |
 | --- | --- | --- |
-| `SPlusCC.exe` | `Crestron\Simpl` | compiles target-specific `.usp` modules |
+| `SPlusCC.exe` | `Crestron\Simpl` | Crestron's SIMPL+ compiler; compiles target-specific `.usp` modules |
 | `CSharpCompiler.dll` | `Crestron\Simpl` | SIMPL# compilation integration |
 | `Crestron.Tools.SIMPLSharp.Services.dll` | `Crestron\Simpl` | official assembly verification/signing API |
 | `Mono.Cecil.dll`, `Ionic.Zip.dll` | `Crestron\Simpl` | assembly and CLZ processing used by the pipeline |
@@ -85,8 +92,8 @@ revalidated by the CLI and must never be committed or copied between hosts.
 
 Exit code `0` means every required input was found. Exit code `2` means the
 report is useful but one or more inputs are missing. Missing proprietary
-entries are installation/licensing work, not a reason to download binaries
-from an untrusted source.
+entries are installation/licensing work. Do not download binaries from an
+untrusted source; use the authorized Crestron dealer channel.
 
 ## PowerShell execution policy
 

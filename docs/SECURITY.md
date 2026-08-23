@@ -36,8 +36,9 @@ variables, command history, CI logs, or issue attachments.
 
 The setup script may install public dependencies only when explicitly asked.
 It never downloads Crestron software, firmware, SDK resources, or signing
-material. Obtain proprietary components from the vendor-supported channel and
-verify their license and integrity independently.
+material. Downloading those components requires an authorized Crestron dealer
+account. Obtain them through the dealer-supported channel and verify their
+license and integrity independently.
 
 The CI workflow deliberately does not claim to build a signed CLZ when the
 proprietary toolchain is unavailable. A green CI job covers source/scripts and
