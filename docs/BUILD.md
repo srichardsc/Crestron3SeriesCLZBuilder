@@ -1,10 +1,16 @@
 # Build and packaging
 
-The command-line interface is package based and accepts a project
-configuration with `--config`. The configuration selects the source project
-(`csproj`), assembly identity, zero or more `.usp` modules, target list, output
-directory, toolchain paths, and build metadata. This keeps one builder usable
-for multiple projects without copying the pipeline.
+The command-line interface accepts a project configuration with `--config`.
+That file selects the source project (`csproj`), assembly identity, optional
+`.usp` modules, targets, output directory, toolchain paths, and package
+metadata. The same builder can then be used for another project by selecting a
+different configuration. The driver source and SDK project stay in their own
+repository; this tool only compiles and packages them.
+
+Before creating a project, read
+[`DRIVER-DEVELOPMENT.md`](DRIVER-DEVELOPMENT.md). It covers the Compact
+Framework constraints that still apply when VS2022 is the editor and MSBuild
+host.
 
 ## Create a configuration
 
@@ -91,7 +97,7 @@ configurations for separate products or release channels.
 
 ## Pipeline stages
 
-The intended pipeline is deterministic and fail-closed:
+The pipeline is deterministic and stops on the first invalid input:
 
 1. Resolve and validate the selected config, project, assembly identity, `.usp`
    inventory, target names, output path, and required local toolchain.

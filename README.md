@@ -11,7 +11,8 @@ selects the `csproj`, assembly name, `.usp` modules, targets (`series3`,
 `series4`), output directory, and reproducibility options. Users choose these
 values with `--config` or the equivalent `scripts/Build.ps1` parameters.
 
-The final build depends on locally installed proprietary tools and resources:
+The final build uses proprietary tools and resources installed on the build
+machine:
 **VS2022/MSBuild**, **.NET Compact Framework 3.5**, **SIMPL Windows/SPlusCC/
 Cresdb**, and the **SIMPL# SDK / SIMPLSharpService**. This repository does not
 download, copy, redistribute, or recreate those components. It contains no
@@ -70,8 +71,8 @@ selected output directory
 
 The assembly and `CLZ` are built once and copied to selected targets. `.USH`
 files are generated separately because `SPlusCC.exe` receives the target. A
-green build is not hardware acceptance: SIMPL Windows import, firmware,
-Toolbox, reboot, and real operation are separate gates.
+A successful build is not hardware acceptance. SIMPL Windows import, firmware,
+Toolbox, reboot, and real operation still need to be checked on a processor.
 
 ## Requirements
 
@@ -128,6 +129,9 @@ selection is recorded by `init` in the configuration file.
   VS2022/MSBuild, CF 3.5, SIMPL Windows, SPlusCC, Cresdb, and SIMPL# SDK.
 - [Build and packaging](docs/BUILD.md): `--config` selection, pipeline,
   options, outputs, and gates.
+- [Driver development](docs/DRIVER-DEVELOPMENT.md): how to write a
+  3-Series-compatible SIMPL# driver in VS2022, choose CF references, define the
+  SIMPL+ boundary, and test on hardware.
 - [Configuration reference](docs/CONFIGURATION.md): exact schema, path rules,
   assembly output templates, local discovery, and multi-project selection.
 - [Reproducibility](docs/REPRODUCIBILITY.md): lockfile, hashes, staging, and
