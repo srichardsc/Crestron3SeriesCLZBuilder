@@ -38,11 +38,16 @@ class PublishTests(unittest.TestCase):
 
             real_move = shutil.move
             failed = False
+            move_count = 0
 
             def partial_move(source: str, destination: str):
-                nonlocal failed
+                nonlocal failed, move_count
+                move_count += 1
                 result = real_move(source, destination)
-                if not failed and Path(source) == publish / "series4" and Path(destination) == root / "dist" / "series4":
+                # The fourth move installs the second target after both old
+                # targets have been backed up. Count operations instead of
+                # comparing platform-normalized temporary paths.
+                if not failed and move_count == 4:
                     failed = True
                     raise OSError("simulated post-move failure")
                 return result
