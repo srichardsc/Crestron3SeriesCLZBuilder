@@ -8,8 +8,12 @@ which is commonly available on commissioning laptops.
 ## Public prerequisites
 
 Install Git, Python 3.10 or newer, and Visual Studio 2022 (Community,
-Professional, Enterprise, or Build Tools with MSBuild). Python is used for the
-generic build pipeline; MSBuild compiles the selected `csproj`.
+Professional, Enterprise, or Build Tools with MSBuild). Use the official
+[Visual Studio Community download](https://visualstudio.microsoft.com/vs/community/).
+If the current download page offers a newer major version, use Microsoft's
+[older Visual Studio downloads](https://visualstudio.microsoft.com/vs/older-downloads/)
+page to select VS2022. Python is used for the generic build pipeline; MSBuild
+compiles the selected `csproj`.
 
 The optional commands below use the public `winget` catalog:
 
@@ -26,7 +30,9 @@ installation of this repository. The Python package has no runtime
 dependencies, but pip may resolve the declared public setuptools build backend
 from its configured package index when it is not already cached.
 
-The public Windows **.NET Framework 3.5** feature can be enabled explicitly:
+The public Windows **.NET Framework 3.5** feature can be enabled explicitly.
+Microsoft also provides the [official .NET Framework 3.5 SP1
+download](https://www.microsoft.com/es-es/download/details.aspx?id=21):
 
 ```powershell
 # Run from an elevated PowerShell window.

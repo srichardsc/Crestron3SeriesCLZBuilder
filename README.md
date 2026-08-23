@@ -84,7 +84,8 @@ Toolbox, reboot, and real operation still need to be checked on a processor.
 | Windows 10/11 x64 | build and Crestron tools | supported development host |
 | Git | clone and review changes | public; can be installed with winget |
 | Python 3.10+ | reproducible pipeline | public; `Setup.ps1 -InstallOpenSource` can install it |
-| Visual Studio 2022 / MSBuild 17.x | compile the project | Build Tools or VS2022 with MSBuild |
+| Visual Studio 2022 / MSBuild 17.x | compile the project | [Visual Studio Community](https://visualstudio.microsoft.com/vs/community/) or [older Visual Studio downloads](https://visualstudio.microsoft.com/vs/older-downloads/) |
+| .NET Framework 3.5 | public Windows feature/reference prerequisite | [Microsoft download](https://www.microsoft.com/es-es/download/details.aspx?id=21); this is not Compact Framework |
 | .NET Compact Framework 3.5 | CF references and `csc.exe` | legacy/manual installation; not downloaded here |
 | SIMPL Windows + SPlusCC (Crestron's SIMPL+ compiler) | generate `.USH` | local Crestron installation |
 | Cresdb / Required References | data, interfaces, dependencies | local Crestron installation |
