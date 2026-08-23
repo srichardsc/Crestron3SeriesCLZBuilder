@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "assembly": {
+    "project": "Project/Driver.csproj",
+    "name": "Driver",
+    "version": "1.0.0.0",
+    "minimumFirmware": "1.007.0017"
+  },
+  "modules": [
+    "SIMPL/Bridge.usp"
+  ],
+  "targets": [
+    "series3",
+    "series4"
+  ],
+  "package": {
+    "dependencies": [],
+    "resources": [],
+    "metadata": {
+      "friendlyName": "Driver",
+      "systemName": "Driver",
+      "entryPoint": "Driver"
+    }
+  },
+  "toolchain": { "paths": {} },
+  "output": {
+    "build": "build",
+    "dist": "dist"
+  }
+}

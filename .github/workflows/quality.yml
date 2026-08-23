@@ -1,0 +1,70 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up public Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Parse PowerShell scripts
+        shell: powershell
+        run: |
+          $failed = $false
+          foreach ($file in Get-ChildItem -LiteralPath scripts -Filter *.ps1 -File) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              $errors | ForEach-Object { Write-Error "$($file.Name): $($_.Message)" }
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Compile Python syntax
+        shell: pwsh
+        run: python -m compileall -q src tests
+
+      - name: Install package without proprietary dependencies
+        shell: pwsh
+        run: python -m pip install --no-deps .
+
+      - name: Run unit tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -v
+
+      - name: Check whitespace
+        shell: pwsh
+        run: git diff-tree --check --no-commit-id --root -r HEAD
+
+      - name: Reject tracked generated binaries
+        shell: pwsh
+        run: |
+          $tracked = git ls-files | Where-Object { $_ -match '\.(dll|exe|pdb|clz|ush|pkg|dat|dat\.der)$' }
+          if ($tracked) {
+            $tracked | ForEach-Object { Write-Error "Generated/proprietary artifact tracked: $_" }
+            exit 1
+          }
+
+      - name: Explain proprietary build boundary
+        shell: pwsh
+        run: |
+          Write-Host 'Public CI validates source, scripts, and repository hygiene.'
+          Write-Host 'Signed CLZ/SPlusCC/hardware gates require a protected licensed Windows host.'

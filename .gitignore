@@ -1,0 +1,34 @@
+# Python/build state
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.whl
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Local toolchain discovery; contains absolute paths for one PC.
+.clz-builder/
+toolchain.local.json
+
+# Generated/proprietary package output. Review license before force-adding.
+*.clz
+*.ush
+*.dll
+*.exe
+*.pdb
+*.dat
+*.dat.der
+*.pkg
+
+# Local reports/logs
+toolchain-report.json
+*.log

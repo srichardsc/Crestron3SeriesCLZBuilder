@@ -1,0 +1,14 @@
+* text=auto eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.ps1 text eol=crlf
+*.cs text eol=crlf
+*.usp text eol=crlf
+*.ush text eol=crlf
+*.clz binary
+*.dll binary
+*.exe binary
+*.pdb binary
+*.dat binary
+*.dat.der binary
