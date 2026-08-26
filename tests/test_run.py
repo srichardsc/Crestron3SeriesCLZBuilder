@@ -42,24 +42,36 @@ class RunCommandTests(unittest.TestCase):
     def make_project(self, root: Path) -> None:
         (root / "Driver.csproj").write_text(LEGACY_CSPROJ, encoding="utf-8")
 
-    def test_first_run_creates_config_and_reports_missing_toolchain(self) -> None:
+    def test_first_run_bumps_even_when_toolchain_missing(self) -> None:
+        """Regression for the CI failure on SDK-less hosts.
+
+        The first run must record the version increment before hitting the
+        toolchain gate; otherwise an SDK-less host stays at 1.0.0.0 forever.
+        Bogus toolchain paths keep this hermetic on licensed hosts too.
+        """
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.make_project(root)
+            seeded = {
+                "schema": 1,
+                "assembly": {"project": "Driver.csproj", "name": "Demo"},
+                "modules": [],
+                "toolchain": {"paths": bogus_paths(root)},
+            }
+            (root / "clz-builder.json").write_text(json.dumps(seeded), encoding="utf-8")
             buffer = io.StringIO()
             with patch("crestron_clz_builder.cli.Path.cwd", return_value=root), \
                  patch("sys.stdout", buffer):
                 code = main(["run"])
             output = buffer.getvalue()
-            # The bare host has no real SDK under the created config; the run
-            # must stop cleanly at the toolchain gate with exit 1 from build().
+            # An SDK-less host stops at build() with exit 1, but the version
+            # bump must already have happened and the failure must be soft.
             self.assertEqual(code, 1)
-            config_path = root / "clz-builder.json"
-            self.assertTrue(config_path.is_file())
-            raw = json.loads(config_path.read_text(encoding="utf-8"))
-            self.assertEqual(raw["assembly"]["project"], "Driver.csproj")
+            raw = json.loads((root / "clz-builder.json").read_text(encoding="utf-8"))
             self.assertEqual(raw["assembly"]["version"], "1.0.0.1")
             self.assertIn("version: 1.0.0.0 -> 1.0.0.1", output)
+            self.assertIn("toolchain not ready yet", output)
+            self.assertFalse((root / "toolchain.lock.json").exists())
 
     def test_second_run_bumps_again(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

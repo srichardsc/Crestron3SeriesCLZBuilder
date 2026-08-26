@@ -397,16 +397,8 @@ def _run_command(args: argparse.Namespace) -> int:
 
     config = load_config(_config_path(str(config_path)))
 
-    # First run on a new configuration: discover the toolchain, write the
-    # initial lock automatically, then continue. Later builds verify against
-    # that lock like a deliberate `build` would.
-    if created_config or not config.resolved_lock_path.is_file():
-        from .toolchain import resolve_tools as _resolve, write_lock as _write_lock
-        tools = _resolve(config)
-        lock_path = _write_lock(config, tools)
-        print(f"wrote toolchain lock: {lock_path}")
-
-    # 2. Version bump so Crestron Home accepts the package as an update.
+    # 2. Version bump FIRST so even an incomplete host records the increment
+    #    (Crestron Home requires a strictly higher version to accept updates).
     previous_version = config.version
     if args.no_bump:
         new_version = previous_version
@@ -427,7 +419,19 @@ def _run_command(args: argparse.Namespace) -> int:
         config = load_config(_config_path(str(config_path)))
         print(f"version: {previous_version} -> {new_version} (Crestron Home will treat it as an update)")
 
-    # 3. Build with the standard gates.
+    # 3. Write the initial toolchain lock on first use. A host with a missing
+    #    toolchain must not crash here: the build gate below reports every
+    #    missing input through the standard checklist path.
+    if created_config or not config.resolved_lock_path.is_file():
+        from .toolchain import resolve_tools as _resolve, write_lock as _write_lock
+        try:
+            tools = _resolve(config)
+            lock_path = _write_lock(config, tools)
+            print(f"wrote toolchain lock: {lock_path}")
+        except ToolchainError as error:
+            print(f"note: toolchain not ready yet ({error}); install the missing inputs and re-run.")
+
+    # 4. Build with the standard gates.
     targets = tuple(item.strip().lower() for item in args.targets.split(",") if item.strip()) if args.targets else ()
     build(config, BuildOptions(args.configuration, targets, args.verify_reproducible, True, False))
     return 0

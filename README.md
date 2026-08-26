@@ -1,10 +1,13 @@
 # Crestron3SeriesCLZBuilder
 
-Open-source tooling and documentation for building Crestron `CLZ` packages
-from a selectable project configuration, a `SIMPL#` project, its assembly, and
-zero or more `SIMPL+` (`.usp`) modules. The same `CLZ` can be installed on
-3-Series and 4-Series; the 3-Series target describes the historical build flow
-and does not, by itself, limit the compatible processor.
+Open-source tooling and documentation for building Crestron `CLZ` packages.
+Drop a driver folder, run one command, get a signed `CLZ` that Crestron Home
+accepts as an update.
+
+> **Why this tool:** every build **automatically increments the driver
+> version**, so when you upload the package to a processor running Crestron
+> Home it is always treated as an update and reloaded - no manual version
+> editing, no ignored uploads because the version did not change.
 
 This repository is generic rather than tied to one product. A configuration
 selects the `csproj`, assembly name, `.usp` modules, targets (`series3`,
@@ -45,10 +48,11 @@ Copy your driver folder anywhere, open a terminal **in that folder**, run:
 <path-to-builder>\.venv\Scripts\python.exe -m crestron_clz_builder run
 ```
 
-First run creates the configuration and lock automatically. Every run increments
-the version so Crestron Home accepts the uploaded package as an update, compiles,
-signs with the official SDK service, and writes `dist\series3\*.clz` and
-`dist\series4\*.clz`. Done.
+First run creates the configuration and lock automatically. Every run
+**increments the driver version automatically** (`version: 1.0.0.1 -> 1.0.0.2`),
+so Crestron Home always accepts the uploaded package as an update and reloads
+the driver - then compiles, signs with the official SDK service, and writes
+`dist\series3\*.clz` and `dist\series4\*.clz`. Done.
 
 With the PowerShell wrapper instead: `<path-to-builder>\scripts\Run.ps1`.
 Never used the tool before? Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md).

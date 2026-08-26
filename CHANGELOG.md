@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-26
+
+### Fixed
+
+- `run` now records the version increment BEFORE touching the toolchain gate,
+  so an SDK-less host still gets its bump recorded (regression from 1.2.0
+  caught by public CI: first/second runs kept versions at 1.0.0.0).
+- A missing toolchain during the first-run lock write is now reported as a
+  soft note instead of aborting before the checklist could render.
+
+### Changed
+
+- README now leads with the automatic-version-bump benefit: every uploaded
+  package is accepted by Crestron Home as an update without manual edits.
+
 ## [1.2.0] - 2026-08-26
 
 ### Added
