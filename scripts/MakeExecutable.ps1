@@ -39,8 +39,14 @@ if ($InstallPyInstaller -or -not (& $venvPython '-m' 'PyInstaller' '--version' 2
 $outputDir = Join-Path $root 'dist-exe'
 $buildDir = Join-Path $root 'build-exe'
 $name = 'clz-builder'
+$signerSource = Join-Path $root 'src\crestron_clz_builder\Signer.cs'
+# entry.py uses absolute imports; __main__.py's relative imports break when
+# executed as a frozen top-level script.
+$entryScript = Join-Path $root 'src\crestron_clz_builder\entry.py'
 
 Write-Host 'Building single-file executable...'
+# All paths passed to PyInstaller must be absolute: relative --add-data paths
+# are resolved against the spec/workpath directory, not the current location.
 & $venvPython '-m' 'PyInstaller' `
     '--clean' `
     '--noconfirm' `
@@ -49,9 +55,9 @@ Write-Host 'Building single-file executable...'
     '--distpath', $outputDir `
     '--workpath', $buildDir `
     '--specpath', $buildDir `
-    '--add-data', "$(Join-Path $root 'src\crestron_clz_builder\Signer.cs');crestron_clz_builder" `
+    "--add-data=$signerSource;crestron_clz_builder" `
     '--hidden-import', 'crestron_clz_builder' `
-    (Join-Path $root 'src\crestron_clz_builder\__main__.py')
+    $entryScript
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed.' }
 
 $executable = Join-Path $outputDir "$name.exe"

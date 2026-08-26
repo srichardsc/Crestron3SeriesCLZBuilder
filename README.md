@@ -1,26 +1,20 @@
 # Crestron3SeriesCLZBuilder
 
-Open-source tooling and documentation for building Crestron `CLZ` packages.
-Drop a driver folder, run one command, get a signed `CLZ` that Crestron Home
-accepts as an update.
+Open-source tooling for building Crestron `CLZ` packages.
+**Drop a driver folder, run one command, get a signed `CLZ` that runs on both
+3-Series and 4-Series processors, and that Crestron Home accepts as an
+update.**
+
+| | |
+| --- | --- |
+| **Just want the exe?** | Grab [`clz-builder.exe`](../../releases/latest) from Releases - copy it next to your driver and run it. No Python needed. |
+| **Never used it?** | Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md) - clone-to-import walkthrough, zero knowledge assumed |
+| **In a hurry?** | [Quick start](#quick-start) below - 2 commands per build |
 
 > **Why this tool:** every build **automatically increments the driver
 > version**, so when you upload the package to a processor running Crestron
 > Home it is always treated as an update and reloaded - no manual version
 > editing, no ignored uploads because the version did not change.
-
-This repository is generic rather than tied to one product. A configuration
-selects the `csproj`, assembly name, `.usp` modules, targets (`series3`,
-`series4`), output directory, and reproducibility options. Users choose these
-values with `--config` or the equivalent `scripts/Build.ps1` parameters.
-
-The final build uses proprietary tools and resources installed on the build
-machine:
-**VS2022/MSBuild**, **.NET Compact Framework 3.5**, **SIMPL Windows**, **SPlusCC
-(Crestron's SIMPL+ compiler)**, **Cresdb**, and the **SIMPL# SDK /
-SIMPLSharpService**. This repository does not
-download, copy, redistribute, or recreate those components. It contains no
-certificates, private keys, example PSKs, or homemade signer.
 
 ## Quick start
 
@@ -55,18 +49,33 @@ the driver - then compiles, signs with the official SDK service, and writes
 `dist\series3\*.clz` and `dist\series4\*.clz`. Done.
 
 With the PowerShell wrapper instead: `<path-to-builder>\scripts\Run.ps1`.
-Never used the tool before? Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md).
-Prefer no Python on the build machine? Generate a single-file executable with
-`.\scripts\MakeExecutable.ps1` and copy `dist-exe\clz-builder.exe` next to your driver.
 
-Replace example names with the files in the selected project. If `Setup.ps1`
-reports missing proprietary components, follow
-[`docs/INSTALLATION.md`](docs/INSTALLATION.md). Downloading Crestron software,
-SIMPL Windows, SIMPL+, SDKs, or related tools requires an authorized Crestron
-dealer account. The script cannot accept a license, download, or install those
-components on the user's behalf.
+## Download clz-builder.exe (no Python needed)
 
-## What gets built
+Every tagged release ships a ready-to-run Windows executable built by CI:
+
+1. Download [`clz-builder.exe`](../../releases/latest) (plus its `.sha256`) from Releases.
+2. Copy it into your driver's folder.
+3. Open a terminal there and run:
+
+```powershell
+clz-builder.exe setup   # first time: checks this PC and prepares the config
+clz-builder.exe run     # every build: new version + signed CLZ for series3 & series4
+```
+
+The executable is produced from this exact source by the `release` workflow;
+verify your download against the published SHA-256. You can also build it
+yourself at any time with `.\scripts\MakeExecutable.ps1`.
+
+The licensed Crestron toolchain (SIMPL Windows, SIMPL# SDK, Cresdb, CF 3.5)
+still must be installed on the host; the exe replaces only the Python runtime.
+
+## How it works
+
+A configuration file selects the `csproj`, assembly name, `.usp` modules,
+targets (`series3`, `series4`), output directory, and reproducibility options,
+so the same builder serves any project. See
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for the exact schema.
 
 ```text
 selected config + SIMPL# source (.NET Compact Framework 3.5)
