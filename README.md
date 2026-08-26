@@ -32,15 +32,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 # The script does not install or modify the Crestron SDK.
 .\scripts\Setup.ps1
 
-# Install only explicitly requested public prerequisites.
-.\scripts\Setup.ps1 -InstallOpenSource
-
-# Create a configuration that selects project, assembly and modules.
-.\.venv\Scripts\python.exe -m crestron_clz_builder init `
-  --config .\clz-builder.json `
-  --project .\Project\Driver.csproj `
-  --module .\SIMPL\Bridge.usp `
-  --name Driver
+# Guided setup: finds your project, checks all 24 toolchain inputs, prints
+# the exact fix for every missing component, then prepares config + lock.
+.\.venv\Scripts\python.exe -m crestron_clz_builder setup
 
 # Build selected targets and output defined by that configuration.
 .\scripts\Build.ps1 -Config .\clz-builder.json
@@ -48,6 +42,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 # Two clean builds and SHA-256 comparison before publication.
 .\scripts\Build.ps1 -Config .\clz-builder.json -VerifyReproducible
 ```
+
+Never used this kind of tool before? Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md)
+instead: it explains every step from clone to SIMPL Windows import. Prefer no
+Python on the build machine? Generate a single-file executable with
+`.\scripts\MakeExecutable.ps1` and run `clz-builder.exe setup`.
 
 Replace example names with the files in the selected project. If `Setup.ps1`
 reports missing proprietary components, follow
@@ -129,6 +128,7 @@ selection is recorded by `init` in the configuration file.
 
 ## Documentation
 
+- [First-time guide](docs/FOR-DUMMIES.md): zero-knowledge, step-by-step from clone to import in SIMPL Windows.
 - [Installation and dependencies](docs/INSTALLATION.md): Windows,
   VS2022/MSBuild, CF 3.5, SIMPL Windows, SPlusCC (Crestron's SIMPL+ compiler),
   Cresdb, and SIMPL# SDK.

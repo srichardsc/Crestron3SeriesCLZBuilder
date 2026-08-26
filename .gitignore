@@ -8,7 +8,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 build/
+build-exe/
 dist/
+dist-exe/
 bin/
 obj/
 .vs/

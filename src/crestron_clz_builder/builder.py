@@ -11,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 import uuid
 import zipfile
 import zlib
@@ -35,6 +36,23 @@ class BuildOptions:
 
 def _fail(message: str) -> None:
     raise BuildError(message)
+
+
+class _StageReporter:
+    """Prints ``[stage/total] label`` lines so users know where the build is."""
+
+    def __init__(self, total: int) -> None:
+        self.total = total
+        self.current = 0
+        self._started = time.perf_counter()
+
+    def begin(self, label: str) -> None:
+        self.current += 1
+        print(f"[{self.current}/{self.total}] {label}", flush=True)
+
+    @property
+    def elapsed(self) -> float:
+        return time.perf_counter() - self._started
 
 
 def _run(command: Sequence[object], *, cwd: Path) -> None:
@@ -115,7 +133,11 @@ def stable_mvid(config: ProjectConfig, lock_path: Path, assembly_name: str) -> s
 
 
 def _ensure_signer(tools: Mapping[str, Path], build_root: Path) -> Path:
-    signer_source = Path(__file__).with_name("Signer.cs")
+    # Support frozen executables (PyInstaller): Signer.cs travels as package data.
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    signer_source = base / "Signer.cs"
+    if not signer_source.is_file():
+        signer_source = Path(__file__).with_name("Signer.cs")
     _assert_file(signer_source, "Signer.cs")
     helper_dir = build_root / "tools"
     helper_dir.mkdir(parents=True, exist_ok=True)
@@ -310,7 +332,7 @@ def _validate_sources(config: ProjectConfig, assembly_name: str) -> None:
         _fail(f"package dependency/resource collides with reserved CLZ entry: {', '.join(collisions)}")
 
 
-def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: BuildOptions, label: str) -> tuple[dict[str, str], Path]:
+def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: BuildOptions, label: str) -> tuple[dict[str, str], Path, str, str, float]:
     assembly_name = config.effective_assembly_name()
     root = config.resolved_build_dir / options.configuration
     if root.exists():
@@ -319,7 +341,11 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
         shutil.rmtree(root)
     root.mkdir(parents=True, exist_ok=True)
     project = config.project_file
+    targets = options.targets or config.targets
+    total_stages = 4 + len(targets) * (1 + 2 * len(config.modules))
+    reporter = _StageReporter(total_stages)
     print(f"=== CLZ build {assembly_name} {options.configuration} {label}===", flush=True)
+    reporter.begin(f"stage: MSBuild compile ({options.configuration}, Compact Framework 3.5)")
     _run(
         [
             tools["msbuild"], project, "/tv:3.5", "/t:Rebuild", "/p:Configuration=" + options.configuration,
@@ -336,14 +362,16 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
     main = root / "assembly" / f"{assembly_name}.dll"
     main.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(main_source, main)
+    reporter.begin("stage: prepare official signer helper")
     helper = _ensure_signer(tools, root)
     mvid = stable_mvid(config, config.resolved_lock_path, assembly_name)
+    reporter.begin("stage: patch MVID and sign with the official SIMPL# service")
     _run([helper, "patch", main, tools["cecil"], tools["custom_attributes"], mvid], cwd=config.root)
     _run([helper, "sign", main, tools["compiler"], tools["services"], tools["ionic"], main.parent, tools["cresdb"], OFFICIAL_SIGNER_THUMBPRINT], cwd=config.root)
 
-    stage = root / "clz" / "staging"
-    stage.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(main, stage / main.name)
+    stage_dir = root / "clz" / "staging"
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(main, stage_dir / main.name)
     dependencies = [tools["custom_attributes"], tools["helper_reference"], *config.resolved_dependencies]
     resources = [tools["data_file"], tools["data_signature"], *config.resolved_resources]
     seen: set[str] = set()
@@ -352,17 +380,17 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
             _fail(f"duplicate CLZ entry filename: {source.name}")
         seen.add(source.name.lower())
         _assert_file(source, "CLZ dependency/resource")
-        shutil.copy2(source, stage / source.name)
-    _write_program_config(stage, config, assembly_name)
-    _write_manifests(stage, stage / main.name, dependencies, resources, config, assembly_name)
-    _validate_manifests(stage, stage / main.name, dependencies, resources, config, assembly_name)
+        shutil.copy2(source, stage_dir / source.name)
+    reporter.begin("stage: package deterministic CLZ with manifests")
+    _write_program_config(stage_dir, config, assembly_name)
+    _write_manifests(stage_dir, stage_dir / main.name, dependencies, resources, config, assembly_name)
+    _validate_manifests(stage_dir, stage_dir / main.name, dependencies, resources, config, assembly_name)
     clz = root / "clz" / f"{assembly_name}.clz"
-    deterministic_package(stage, clz, assembly_name, [resource.name for resource in resources if resource.name in {tools["data_file"].name, tools["data_signature"].name}])
-    validate_clz(clz, stage, assembly_name, [tools["data_file"].name, tools["data_signature"].name])
+    deterministic_package(stage_dir, clz, assembly_name, [resource.name for resource in resources if resource.name in {tools["data_file"].name, tools["data_signature"].name}])
+    validate_clz(clz, stage_dir, assembly_name, [tools["data_file"].name, tools["data_signature"].name])
 
     publish_root = root / "publish"
     outputs: list[Path] = []
-    targets = options.targets or config.targets
     for target in targets:
         target_root = root / "modules" / target
         target_root.mkdir(parents=True, exist_ok=True)
@@ -377,12 +405,14 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
                 staged.write_bytes(normalized.replace("\n", "\r\n").encode("ascii"))
             except UnicodeEncodeError as error:
                 _fail(f"SIMPL+ source must be ASCII for SPlusCC ({source}): {error}")
+            reporter.begin(f"stage: SPlusCC compile {module.filename} for {target}")
             _run([tools["spluscc"], "\\rebuild", staged, "\\target", target], cwd=target_root)
             generated = target_root / module.header_filename
             _assert_file(generated, "SPlusCC header output")
             shutil.copy2(staged, target_publish / staged.name)
             shutil.copy2(generated, target_publish / generated.name)
             outputs.extend([target_publish / staged.name, target_publish / generated.name])
+        reporter.begin(f"stage: publish {target}")
         shutil.copy2(clz, target_publish / clz.name)
         shutil.copy2(main, target_publish / main.name)
         _validate_target(target_publish, clz, main, config)
@@ -392,8 +422,10 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
             if (publish_root / "series3" / name).read_bytes() != (publish_root / "series4" / name).read_bytes():
                 _fail(f"{name} differs between series3 and series4 staging")
     snapshot = {str(path.relative_to(config.root)).replace("\\", "/"): sha256(path) for path in outputs}
-    print(f"CLZ sha256={sha256(clz)}", flush=True)
-    return snapshot, publish_root
+    clz_digest = sha256(clz)
+    main_digest = sha256(main)
+    print(f"CLZ sha256={clz_digest}", flush=True)
+    return snapshot, publish_root, clz_digest, main_digest, reporter.elapsed
 
 
 def publish_transaction(config: ProjectConfig, publish_root: Path, targets: Sequence[str], configuration: str) -> None:
@@ -467,16 +499,37 @@ def build(config: ProjectConfig, options: BuildOptions) -> None:
         _fail(str(error))
     from .toolchain import build_lock
     with build_lock(config, options.recover_lock):
-        first, publish_root = _build_once(config, tools, options, "pass 1 ")
+        first, publish_root, clz_digest, main_digest, elapsed = _build_once(config, tools, options, "pass 1 ")
         if options.verify_reproducible:
-            second, publish_root = _build_once(config, tools, options, "pass 2 ")
+            second, publish_root, second_clz_digest, second_main_digest, second_elapsed = _build_once(config, tools, options, "pass 2 ")
             if first != second:
                 differences = sorted(set(first) | set(second))
                 detail = [f"{name}: {first.get(name)} != {second.get(name)}" for name in differences if first.get(name) != second.get(name)]
                 _fail("reproducibility mismatch:\n" + "\n".join(detail))
-            print("reproducible=PASS (two clean builds, byte-identical artifacts)")
+            if clz_digest != second_clz_digest or main_digest != second_main_digest:
+                _fail("reproducibility mismatch: artifact hashes differ between passes")
+            print("stage: reproducibility gate PASSED (two clean builds, byte-identical artifacts)", flush=True)
         if options.publish:
             publish_transaction(config, publish_root, options.targets, options.configuration)
+        print("")
+        print("=== build summary ===")
+        print(f"  assembly : {assembly_name}.dll ({main_digest})")
+        print(f"  package  : {assembly_name}.clz ({clz_digest})")
+        if options.publish:
             for target in options.targets:
-                print(f"target={target} files={len(list((config.resolved_dist_dir / target).glob('*')))}")
-    print("build=PASS")
+                destination = config.resolved_dist_dir / target
+                file_count = len(list(destination.glob("*"))) if destination.is_dir() else 0
+                print(f"  target   : {target} - {file_count} files in dist: {destination}")
+        else:
+            for target in options.targets:
+                destination = config.resolved_build_dir / options.configuration / "publish" / target
+                file_count = len(list(destination.glob("*"))) if destination.is_dir() else 0
+                print(f"  target   : {target} - {file_count} files staged (--no-publish): {destination}")
+        print(f"  time     : {elapsed:.1f}s pass 1" + (f" + {second_elapsed:.1f}s pass 2" if options.verify_reproducible else ""))
+        print("")
+        print("Next steps:")
+        print(f"  1. Import {assembly_name}.clz from SIMPL Windows (File > Export/Import > Load Program Package).")
+        print("  2. Verify the program compiles and downloads to your processor.")
+        print("  3. Check ERRlog on the processor after a reboot.")
+        print("A successful local build is not hardware acceptance.")
+        print("build=PASS")

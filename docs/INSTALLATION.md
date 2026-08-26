@@ -96,6 +96,12 @@ revalidated by the CLI and must never be committed or copied between hosts.
 .\.venv\Scripts\python.exe -m crestron_clz_builder doctor --config .\clz-builder.json
 ```
 
+`doctor` prints every input with its status; missing entries include the
+expected path and an actionable fix, grouped into public versus licensed
+components. Add `--json` for the machine-readable report used by scripts.
+The interactive `setup` subcommand runs this check as part of a guided first
+run and writes the lock when everything is present.
+
 Exit code `0` means every required input was found. Exit code `2` means the
 report is useful but one or more inputs are missing. Missing proprietary
 entries are installation/licensing work. Do not download binaries from an

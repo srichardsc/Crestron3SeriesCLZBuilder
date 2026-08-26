@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -17,7 +18,7 @@ from typing import Iterator, Mapping
 import uuid
 import zlib
 
-from .config import ConfigError, ProjectConfig
+from .config import ProjectConfig
 
 
 OFFICIAL_SIGNER_THUMBPRINT = "258CCE9B7DA79C8D5C33431BDA2DD32CB64AEC7D"
@@ -26,6 +27,89 @@ LOCK_SCHEMA = 1
 
 class ToolchainError(RuntimeError):
     """The required installed toolchain is unavailable or changed."""
+
+
+# Human-readable metadata for every toolchain input, in the same order the
+# resolver evaluates them. ``kind`` separates inputs a user can install from
+# public downloads ("public") or Windows built-ins ("builtin") versus inputs
+# that require a licensed Crestron installation ("licensed").
+_ENTRY_SPECS: tuple[tuple[str, str, str, str, str], ...] = (
+    # (name, human label, providing component, kind, actionable fix)
+    ("msbuild", "MSBuild 17.x", "Visual Studio 2022 / Build Tools", "public",
+     "run scripts\\Setup.ps1 -InstallBuildTools, or install VS2022 Community"),
+    ("csc", ".NET Framework 3.5 csc.exe", "Windows feature .NET Framework 3.5", "public",
+     "from an elevated shell run scripts\\Setup.ps1 -EnableNetFx3"),
+    ("helperCsc", ".NET Framework 4 csc.exe (signer helper)", ".NET Framework 4.x (Windows built-in)", "builtin",
+     "verify %WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe exists"),
+    ("spluscc", "SPlusCC.exe (Crestron's SIMPL+ compiler)", "SIMPL Windows", "licensed",
+     "install SIMPL Windows through your authorized Crestron dealer (docs/INSTALLATION.md)"),
+    ("compiler", "CSharpCompiler.dll", "SIMPL# SDK", "licensed",
+     "install the SIMPL# SDK through your authorized Crestron dealer (docs/INSTALLATION.md)"),
+    ("services", "Crestron.Tools.SIMPLSharp.Services.dll", "SIMPL# SDK verification/signing service", "licensed",
+     "install the SIMPL# SDK through your authorized Crestron dealer (docs/INSTALLATION.md)"),
+    ("ionic", "Ionic.Zip.dll", "SDK CLZ processing dependency", "licensed",
+     "installed together with SIMPL Windows / SIMPL# SDK"),
+    ("cecil", "Mono.Cecil.dll", "SDK assembly processing dependency", "licensed",
+     "installed together with SIMPL Windows / SIMPL# SDK"),
+    ("cresdb", "Cresdb Programming data", "Cresdb Programming", "licensed",
+     "install Cresdb Programming data through your authorized Crestron dealer"),
+    ("cf", ".NET Compact Framework 3.5 reference assemblies", ".NET Compact Framework 3.5", "licensed",
+     "obtain the supported CF 3.5 reference pack (docs/INSTALLATION.md); this tool never redistributes it"),
+    ("references", "Required References", "Cresdb Programming data", "licensed",
+     "installed together with Cresdb Programming data"),
+    ("data", "Required Project Files", "Cresdb Programming data", "licensed",
+     "installed together with Cresdb Programming data"),
+    ("cf_mscorlib", "mscorlib.dll (Compact Framework)", ".NET Compact Framework 3.5", "licensed",
+     "part of the CF 3.5 reference assemblies"),
+    ("cf_system", "System.dll (Compact Framework)", ".NET Compact Framework 3.5", "licensed",
+     "part of the CF 3.5 reference assemblies"),
+    ("cf_system_core", "System.Core.dll (Compact Framework)", ".NET Compact Framework 3.5", "licensed",
+     "part of the CF 3.5 reference assemblies"),
+    ("cf_csc_rsp", "csc.rsp (Compact Framework build)", ".NET Framework 3.5", "public",
+     "installed by the Windows .NET Framework 3.5 feature"),
+    ("cf_common_targets", "Microsoft.Common.targets (CF build)", ".NET Framework 3.5", "public",
+     "installed by the Windows .NET Framework 3.5 feature"),
+    ("cf_csharp_targets", "Microsoft.CSharp.targets (CF build)", ".NET Framework 3.5", "public",
+     "installed by the Windows .NET Framework 3.5 feature"),
+    ("msbuild_rsp", "MSBuild.rsp", "Visual Studio 2022 / Build Tools", "public",
+     "installed together with MSBuild"),
+    ("helper_system", "System.dll (.NET Framework 4)", ".NET Framework 4.x (Windows built-in)", "builtin",
+     "verify %WINDIR%\\Microsoft.NET\\Framework\\v4.0.30319 exists"),
+    ("helper_reference", "SimplSharpHelperInterface.dll", "Cresdb Required References", "licensed",
+     "installed together with Cresdb Programming data"),
+    ("custom_attributes", "SimplSharpCustomAttributesInterface.dll", "Cresdb Required References", "licensed",
+     "installed together with Cresdb Programming data"),
+    ("data_file", "SimplSharpData.dat", "Cresdb Required Project Files", "licensed",
+     "installed together with Cresdb Programming data"),
+    ("data_signature", "SimplSharpData.dat.der (official data signature)", "Cresdb Required Project Files", "licensed",
+     "installed together with Cresdb Programming data"),
+)
+
+_DIRECTORY_INPUTS = frozenset({"cresdb", "cf", "references", "data"})
+
+
+@dataclass(frozen=True)
+class ToolchainProbe:
+    """Status of one named toolchain input on this host."""
+
+    name: str
+    label: str
+    component: str
+    kind: str
+    fix: str
+    expected_path: Path | None
+    ok: bool
+
+    @property
+    def entry_type(self) -> str:
+        return "directory" if self.name in _DIRECTORY_INPUTS else "file"
+
+
+def _spec(name: str) -> tuple[str, str, str, str, str]:
+    for spec in _ENTRY_SPECS:
+        if spec[0] == name:
+            return spec
+    raise KeyError(name)
 
 
 def _fail(message: str) -> None:
@@ -192,7 +276,7 @@ def resolve_tools(config: ProjectConfig) -> dict[str, Path]:
     msbuild = _file(config, cache, "msbuild", next((candidate for candidate in msbuild_defaults if candidate.is_file()), msbuild_defaults[0])) if configured_msbuild else next((candidate.resolve() for candidate in msbuild_defaults if candidate.is_file()), None)
     if msbuild is None:
         _fail("required toolchain input not found (msbuild): install VS2022 MSBuild or set toolchain.paths.msbuild")
-    tools = {
+    tools: dict[str, Path] = {
         "msbuild": msbuild,
         "csc": _file(config, cache, "csc", windir / "Microsoft.NET" / "Framework" / "v3.5" / "csc.exe"),
         "helperCsc": _file(config, cache, "helperCsc", windir / "Microsoft.NET" / "Framework" / "v4.0.30319" / "csc.exe"),
@@ -240,6 +324,153 @@ def resolve_tools(config: ProjectConfig) -> dict[str, Path]:
             pass
         _fail(f"cannot persist local toolchain cache {cache_path}: {error}")
     return resolved
+
+
+def probe_toolchain(config: ProjectConfig) -> list[ToolchainProbe]:
+    """Report the status of every toolchain input without raising.
+
+    ``resolve_tools`` stops at the first missing input; this probe answers
+    every input independently so a user can see the full checklist of what is
+    installed and what is missing on this host. Discovery reuses the same
+    default-path logic as the resolver; when an input cannot be located at
+    all (for example a required environment variable is absent) its expected
+    path is reported as ``None``.
+    """
+    probes: list[ToolchainProbe] = []
+    try:
+        tools = resolve_tools(config)
+        for spec_name, label, component, kind, fix in _ENTRY_SPECS:
+            path = tools.get(spec_name)
+            exists = path is not None and (path.is_dir() if spec_name in _DIRECTORY_INPUTS else path.is_file())
+            probes.append(ToolchainProbe(spec_name, label, component, kind, fix, path, exists))
+        return probes
+    except ToolchainError:
+        pass
+    # Full discovery failed; answer each input independently so the checklist
+    # still shows what IS installed and what is missing.
+    cache = _load_local_cache(config)
+    pf86_value, pf_value, windir_value = (os.environ.get(name) for name in ("ProgramFiles(x86)", "ProgramFiles", "WINDIR"))
+    if not pf86_value or not pf_value or not windir_value:
+        missing_variable = next(
+            name
+            for name, value in (("ProgramFiles(x86)", pf86_value), ("ProgramFiles", pf_value), ("WINDIR", windir_value))
+            if not value
+        )
+        message = f"required Windows environment variable is missing: {missing_variable}"
+        return [
+            ToolchainProbe(spec[0], spec[1], spec[2], spec[3], f"{spec[4]} ({message})", None, False)
+            for spec in _ENTRY_SPECS
+        ]
+    pf86, pf, windir = Path(pf86_value), Path(pf_value), Path(windir_value)
+    crestron = pf86 / "Crestron"
+    simpl = crestron / "Simpl"
+    cresdb_default = crestron / "Cresdb" / "Programming"
+    cf_default = pf86 / "Microsoft.NET" / "SDK" / "CompactFramework" / "v3.5" / "WindowsCE"
+
+    def configured_or_cached(name: str) -> Path | None:
+        explicit = config.tool_paths.get(name)
+        cached = None if explicit else cache.get(name)
+        raw = explicit or cached
+        if not raw:
+            return None
+        value = Path(_expand(raw))
+        if cached and not value.exists():
+            return None
+        if not value.is_absolute():
+            value = config.root / value
+        return value
+
+    def default_for(name: str) -> Path | None:
+        if name == "msbuild":
+            candidates: list[Path] = []
+            env_msbuild = os.environ.get("CLZ_BUILDER_MSBUILD")
+            if env_msbuild:
+                candidates.append(Path(_expand(env_msbuild)))
+            which_msbuild = shutil.which("MSBuild.exe") or shutil.which("msbuild")
+            if which_msbuild:
+                candidates.append(Path(which_msbuild))
+            vswhere_candidates = (
+                pf86 / "Microsoft Visual Studio" / "Installer" / "vswhere.exe",
+                pf / "Microsoft Visual Studio" / "Installer" / "vswhere.exe",
+            )
+            vswhere = next((entry for entry in vswhere_candidates if entry.is_file()), None)
+            if vswhere is not None:
+                try:
+                    result = subprocess.run(
+                        [str(vswhere), "-latest", "-products", "*", "-requires", "Microsoft.Component.MSBuild", "-find", r"MSBuild\**\Bin\MSBuild.exe"],
+                        capture_output=True, text=True, timeout=10, check=False,
+                    )
+                    candidates.extend(Path(line.strip()) for line in result.stdout.splitlines() if line.strip())
+                except (OSError, subprocess.SubprocessError):
+                    pass
+            for edition in ("Community", "BuildTools"):
+                for base in (pf86, pf):
+                    candidates.append(base / "Microsoft Visual Studio" / "2022" / edition / "MSBuild" / "Current" / "Bin" / "MSBuild.exe")
+            found = next((candidate for candidate in candidates if candidate.is_file()), None)
+            return found.resolve() if found else next((candidate for candidate in candidates if str(candidate)), candidates[-1])
+        if name == "csc":
+            return windir / "Microsoft.NET" / "Framework" / "v3.5" / "csc.exe"
+        if name == "helperCsc":
+            return windir / "Microsoft.NET" / "Framework" / "v4.0.30319" / "csc.exe"
+        if name == "spluscc":
+            which_spluscc = shutil.which("SPlusCC.exe")
+            return Path(which_spluscc) if which_spluscc else simpl / "SPlusCC.exe"
+        if name == "compiler":
+            return simpl / "CSharpCompiler.dll"
+        if name == "services":
+            return simpl / "Crestron.Tools.SIMPLSharp.Services.dll"
+        if name == "ionic":
+            return simpl / "Ionic.Zip.dll"
+        if name == "cecil":
+            return simpl / "Mono.Cecil.dll"
+        if name == "cresdb":
+            return cresdb_default
+        if name == "cf":
+            return cf_default
+        references_default = cresdb_default / "Libraries" / "Required References"
+        data_default = cresdb_default / "Libraries" / "Required Project Files"
+        if name == "references":
+            return references_default
+        if name == "data":
+            return data_default
+        if name == "cf_mscorlib":
+            return cf_default / "mscorlib.dll"
+        if name == "cf_system":
+            return cf_default / "System.dll"
+        if name == "cf_system_core":
+            return cf_default / "System.Core.dll"
+        if name == "cf_csc_rsp":
+            return windir / "Microsoft.NET" / "Framework" / "v3.5" / "csc.rsp"
+        if name == "cf_common_targets":
+            return windir / "Microsoft.NET" / "Framework" / "v3.5" / "Microsoft.Common.targets"
+        if name == "cf_csharp_targets":
+            return windir / "Microsoft.NET" / "Framework" / "v3.5" / "Microsoft.CSharp.targets"
+        msbuild_path = configured_or_cached("msbuild") or default_for("msbuild")
+        if name == "msbuild_rsp":
+            return msbuild_path.parent / "MSBuild.rsp"
+        if name == "helper_system":
+            helper_csc = configured_or_cached("helperCsc")
+            base = helper_csc.parent if helper_csc else windir / "Microsoft.NET" / "Framework" / "v4.0.30319"
+            return base / "System.dll"
+        references_path = configured_or_cached("references") or (cache.get("references") and Path(cache["references"])) or references_default  # type: ignore[operator]
+        data_path = configured_or_cached("data") or (cache.get("data") and Path(cache["data"])) or data_default  # type: ignore[operator]
+        if name == "helper_reference":
+            return references_path / "SimplSharpHelperInterface.dll"
+        if name == "custom_attributes":
+            return references_path / "SimplSharpCustomAttributesInterface.dll"
+        if name == "data_file":
+            return data_path / "SimplSharpData.dat"
+        if name == "data_signature":
+            return data_path / "SimplSharpData.dat.der"
+        raise KeyError(name)
+
+    results: list[ToolchainProbe] = []
+    for spec in _ENTRY_SPECS:
+        name = spec[0]
+        expected = configured_or_cached(name) or default_for(name)
+        exists = expected is not None and (expected.is_dir() if name in _DIRECTORY_INPUTS else expected.is_file())
+        results.append(ToolchainProbe(name, spec[1], spec[2], spec[3], spec[4], expected if isinstance(expected, Path) else None, exists))
+    return results
 
 
 LOCK_INPUT_NAMES = (

@@ -1,5 +1,10 @@
 # Build and packaging
 
+New to the tool? Start with the [first-time guide](FOR-DUMMIES.md); this page
+is the precise reference. The guided `setup` subcommand performs the first
+two sections below (configuration plus doctor) and writes the lock when the
+host is complete.
+
 The command-line interface accepts a project configuration with `--config`.
 That file selects the source project (`csproj`), assembly identity, optional
 `.usp` modules, targets, output directory, toolchain paths, and package
@@ -97,7 +102,9 @@ configurations for separate products or release channels.
 
 ## Pipeline stages
 
-The pipeline is deterministic and stops on the first invalid input:
+The pipeline is deterministic and stops on the first invalid input. Each
+console run prints its position as ``[n/total] stage: ...`` lines so a failed
+stage is easy to locate and report:
 
 1. Resolve and validate the selected config, project, assembly identity, `.usp`
    inventory, target names, output path, and required local toolchain.

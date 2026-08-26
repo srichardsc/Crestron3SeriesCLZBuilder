@@ -1,16 +1,27 @@
-"""Command line entry point for the standalone CLZ builder."""
+"""Command line entry point for the standalone CLZ builder.
+
+Human-facing commands render an actionable checklist; ``doctor --json`` keeps
+the machine-readable contract consumed by scripts and continuous integration.
+"""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import json
 from pathlib import Path
 import sys
 
+from . import __version__
 from .builder import BuildError, BuildOptions, build
 from .config import ConfigError, default_config, load_config
-from .toolchain import ToolchainError, resolve_tools, verify_lock, write_lock
+from .toolchain import (
+    ToolchainProbe,
+    ToolchainError,
+    probe_toolchain,
+    resolve_tools,
+    verify_lock,
+    write_lock,
+)
 
 
 def _config_path(value: str) -> Path:
@@ -23,6 +34,7 @@ def _load(value: str):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="crestron-clz", description="Build deterministic CLZ packages with an installed Crestron toolchain")
+    parser.add_argument("--version", action="version", version=f"crestron-clz {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", help="write a versioned project configuration")
@@ -35,6 +47,14 @@ def _parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="validate project and installed toolchain inputs")
     doctor.add_argument("--config", default="clz-builder.json")
     doctor.add_argument("--json", action="store_true", dest="as_json")
+
+    setup = sub.add_parser("setup", help="guided first run: checks the host, prints exact fixes, prepares config and lock")
+    setup.add_argument("--config", default=None, help="project configuration to create or verify (default: clz-builder.json)")
+    setup.add_argument("--project", help="path to the SIMPL# .csproj; asked interactively when omitted")
+    setup.add_argument("--module", action="append", default=[], dest="modules", help="optional .usp source; repeat for multiple modules")
+    setup.add_argument("--name", help="assembly filename stem (defaults to project filename stem)")
+    setup.add_argument("--force", action="store_true", help="regenerate the configuration even if it exists")
+    setup.add_argument("--non-interactive", action="store_true", help="never prompt; select defaults or fail instead of asking")
 
     lock = sub.add_parser("lock", help="write or verify the toolchain lock")
     lock.add_argument("--config", default="clz-builder.json")
@@ -50,36 +70,66 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _relative_to(config_path: Path, raw_value: str, label: str) -> str:
+    path = Path(raw_value)
+    if not path.is_absolute():
+        return path.as_posix()
+    try:
+        return path.resolve().relative_to(config_path.parent).as_posix()
+    except ValueError as error:
+        raise ConfigError(f"{label} must be inside the --config directory") from error
+
+
 def _init(args: argparse.Namespace) -> int:
     config_path = _config_path(args.config)
     if config_path.exists() and not args.force:
         raise ConfigError(f"configuration already exists: {config_path}; use --force to replace it")
-    project = Path(args.project)
-    if project.is_absolute():
-        try:
-            project_text = project.resolve().relative_to(config_path.parent).as_posix()
-        except ValueError as error:
-            raise ConfigError("--project must be inside the --config directory") from error
-    else:
-        project_text = project.as_posix()
-    modules: list[str] = []
-    for module in args.module:
-        path = Path(module)
-        if path.is_absolute():
-            try:
-                module = path.resolve().relative_to(config_path.parent).as_posix()
-            except ValueError as error:
-                raise ConfigError("--module must be inside the --config directory") from error
-        modules.append(Path(module).as_posix())
+    project_text = _relative_to(config_path, args.project, "--project")
+    modules = [_relative_to(config_path, module, "--module") for module in args.module]
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(default_config(project_text, modules, name=args.name), indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"initialized={config_path}")
     return 0
 
 
+def _print_checklist(probes: list[ToolchainProbe]) -> int:
+    ok_count = sum(1 for probe in probes if probe.ok)
+    missing = [probe for probe in probes if not probe.ok]
+    width = max(len(probe.label) for probe in probes)
+    for probe in probes:
+        mark = "[OK]" if probe.ok else "[MISSING]"
+        print(f"{mark:<10} {probe.label.ljust(width)}   ({probe.component})")
+        if not probe.ok:
+            expected = f"expected at: {probe.expected_path}" if probe.expected_path else "no standard location found on this host"
+            print(f"{'':<10} {expected}")
+            print(f"{'':<10} fix: {probe.fix}")
+    print("")
+    summary = f"toolchain: {ok_count}/{len(probes)} inputs ready"
+    print(summary + (f"; MISSING {len(missing)}" if missing else ""))
+    if missing:
+        public = sorted({probe.component for probe in missing if probe.kind == "public"})
+        licensed = sorted({probe.component for probe in missing if probe.kind == "licensed"})
+        builtin = sorted({probe.component for probe in missing if probe.kind == "builtin"})
+        if public:
+            print("public components installable from official sources:")
+            for component in public:
+                print(f"  - {component}")
+        if builtin:
+            print("Windows built-in components to verify or repair:")
+            for component in builtin:
+                print(f"  - {component}")
+        if licensed:
+            print("licensed components that must come through your authorized Crestron dealer channel:")
+            for component in licensed:
+                print(f"  - {component}")
+        print("see docs/INSTALLATION.md for supported installation paths; this tool never downloads Crestron software.")
+    return 2 if missing else 0
+
+
 def _doctor(args: argparse.Namespace) -> int:
     config = _load(args.config)
     report: dict[str, object] = {
+        "version": __version__,
         "config": str(config.path),
         "project": str(config.project_file),
         "assembly": config.effective_assembly_name(),
@@ -102,20 +152,164 @@ def _doctor(args: argparse.Namespace) -> int:
             report["lockStatus"] = f"not verified: {error}"
     except ToolchainError as error:
         report["toolchainStatus"] = f"not ready: {error}"
+        exit_code = 2
         if args.as_json:
             print(json.dumps(report, indent=2, sort_keys=True))
-        raise
+            return exit_code
+        print(f"CLZ Builder {__version__} - toolchain check for {config.effective_assembly_name()}")
+        print("")
+        return _print_checklist(probe_toolchain(config))
     if args.as_json:
         print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    print(f"CLZ Builder {__version__} - toolchain check for {config.effective_assembly_name()}")
+    print("")
+    exit_code = _print_checklist(probe_toolchain(config))
+    lock_status = str(report.get("lockStatus", "not verified"))
+    if exit_code == 0:
+        print(f"lock: {lock_status}")
+        if lock_status != "verified":
+            print("fix: run 'crestron-clz lock --config <file>' deliberately after installing or updating the toolchain.")
+        print("")
+        print("next step: crestron-clz build --config <your-config>.json")
+    return exit_code
+
+
+def _prompt(message: str, *, default: str | None = None, required: bool = False, validator=None) -> str | None:
+    """Ask one interactive question; returns None when stdin is unavailable."""
+    while True:
+        suffix = f" [{default}]" if default else ""
+        try:
+            answer = input(f"{message}{suffix}: ").strip()
+        except EOFError:
+            return None
+        if not answer and default is not None:
+            return default
+        if not answer:
+            if not required:
+                return None
+            print("  a value is required here.")
+            continue
+        if validator is not None:
+            error = validator(answer)
+            if error:
+                print(f"  {error}")
+                continue
+        return answer
+
+
+def _setup_wizard(args: argparse.Namespace) -> int:
+    interactive = not args.non_interactive
+    root = Path.cwd().resolve()
+    config_name = args.config or "clz-builder.json"
+    config_path = Path(config_name)
+    if not config_path.is_absolute():
+        config_path = root / config_name
+    config_path = config_path.resolve()
+
+    def csproj_validator(value: str) -> str | None:
+        candidate = Path(value)
+        resolved_candidate = candidate if candidate.is_absolute() else root / candidate
+        if resolved_candidate.suffix.lower() != ".csproj":
+            return f"expected a .csproj file: {resolved_candidate}"
+        if not resolved_candidate.is_file():
+            return f"file not found: {resolved_candidate}"
+        try:
+            resolved_candidate.resolve().relative_to(root)
+        except ValueError:
+            return f"path must stay inside {root}"
+        return None
+
+    print(f"CLZ Builder {__version__} - guided setup")
+    print("=======================================")
+    print("This wizard checks this PC against every toolchain input, prints the exact")
+    print("fix for anything missing, and prepares your project configuration and lock.")
+    print("It never downloads or installs Crestron software on your behalf.")
+    print("")
+
+    # Step 1: select the SIMPL# project.
+    project_text = args.project
+    if not project_text:
+        projects = sorted(
+            (
+                path
+                for path in root.rglob("*.csproj")
+                if not {part.lower() for part in path.parts}.intersection({"bin", "obj", "build", ".venv"})
+            ),
+            key=lambda path: path.relative_to(root).as_posix(),
+        )
+        if not projects:
+            if not interactive:
+                raise ConfigError("no .csproj found under the current directory; pass --project explicitly")
+            answer = _prompt("Path to your SIMPL# .csproj (relative to this folder)", required=True, validator=csproj_validator)
+            if answer is None:
+                raise ConfigError("no .csproj selected")
+            project_text = _relative_to(config_path, answer, "--project")
+        elif len(projects) == 1:
+            project_text = projects[0].relative_to(root).as_posix()
+            print(f"using project: {project_text}")
+        elif interactive:
+            print("Found SIMPL# projects:")
+            for index, path in enumerate(projects, start=1):
+                print(f"  {index}) {path.relative_to(root).as_posix()}")
+            choice = _prompt("Select the project to build (number)", default="1")
+            if choice is None or not choice.isdigit() or not 1 <= int(choice) <= len(projects):
+                raise ConfigError("invalid project selection")
+            project_text = projects[int(choice) - 1].relative_to(root).as_posix()
+        else:
+            project_text = projects[0].relative_to(root).as_posix()
+            print(f"--non-interactive: selecting the first project found: {project_text}")
     else:
-        print(f"config={config.path}")
-        print(f"project={config.project_file}")
-        print(f"assembly={config.effective_assembly_name()}")
-        print(f"targets={','.join(config.targets)}")
-        print(f"modules={len(config.modules)}")
-        print(f"toolchain=READY ({len(report['toolchain'])} inputs)")
-        print(f"lock={report.get('lockStatus', 'not verified')}")
-    return 0
+        error = csproj_validator(project_text)
+        if error:
+            raise ConfigError(error)
+
+    # Step 2: create or keep the project configuration.
+    created_config = False
+    if not config_path.exists():
+        init_args = argparse.Namespace(
+            config=str(config_path), project=project_text, module=list(args.modules), name=args.name, force=False
+        )
+        if _init(init_args):
+            return 1
+        created_config = True
+    elif args.force:
+        init_args = argparse.Namespace(
+            config=str(config_path), project=project_text, module=list(args.modules), name=args.name, force=True
+        )
+        if _init(init_args):
+            return 1
+        created_config = True
+    else:
+        print(f"configuration already exists: {config_path.name} (use --force to regenerate)")
+
+    # Step 3: render the full toolchain checklist with fixes.
+    config = load_config(_config_path(str(config_path)))
+    print("")
+    exit_code = _print_checklist(probe_toolchain(config))
+    if created_config:
+        print(f"created configuration: {config_path}")
+
+    # Step 4: when everything is present, write the lock and hand off to build.
+    if exit_code == 0:
+        try:
+            tools = resolve_tools(config)
+            lock_path = write_lock(config, tools)
+            verify_lock(config, tools)
+            print(f"lock written and verified: {lock_path.name}")
+        except ToolchainError as error:
+            print(f"could not write the toolchain lock automatically: {error}")
+            return 2
+        print("")
+        print("Everything is ready. Build now:")
+        print(f"  crestron-clz build --config {config_path.name}")
+        print("or with the PowerShell wrapper:")
+        print(f"  .\\scripts\\Build.ps1 -Config .\\{config_path.name}")
+        return 0
+    print("")
+    print("Install the components listed above, then re-run this command until the checklist is green.")
+    print("Public items can be installed directly; licensed Crestron software comes through your dealer channel.")
+    return exit_code
 
 
 def _lock(args: argparse.Namespace) -> int:
@@ -144,6 +338,8 @@ def main(argv: list[str] | None = None) -> int:
             return _init(args)
         if args.command == "doctor":
             return _doctor(args)
+        if args.command == "setup":
+            return _setup_wizard(args)
         if args.command == "lock":
             return _lock(args)
         if args.command == "build":
