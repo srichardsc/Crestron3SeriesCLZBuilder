@@ -26,12 +26,27 @@ if ($env:OS -ne 'Windows_NT') {
 
 $root = (Resolve-Path -LiteralPath (Split-Path -Parent $PSScriptRoot)).Path
 $venvPython = Join-Path $root '.venv\Scripts\python.exe'
-if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
-    throw "Local environment not found: $venvPython. Run .\scripts\Setup.ps1 first."
+$pyCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $venvPython -PathType Leaf) {
+    # Preferred: the local environment created by Setup.ps1.
+    $venvPython = (Resolve-Path -LiteralPath $venvPython).Path
+}
+elseif ($pyCommand) {
+    # CI / global install: the package is importable from PATH's Python.
+    Write-Host "Using Python from PATH: $($pyCommand.Source)"
+    $venvPython = $pyCommand.Source
+}
+else {
+    throw "No usable Python found. Run .\scripts\Setup.ps1 or put python.exe on PATH."
 }
 
-if ($InstallPyInstaller -or -not (& $venvPython '-m' 'PyInstaller' '--version' 2>$null)) {
-    Write-Host 'Installing PyInstaller into the local .venv...'
+& $venvPython '-c' 'import crestron_clz_builder' 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw 'crestron_clz_builder is not importable. Run .\scripts\Setup.ps1 first.'
+}
+
+if (-not (& $venvPython '-m' 'PyInstaller' '--version' 2>$null)) {
+    Write-Host 'Installing PyInstaller into the active Python...'
     & $venvPython '-m' 'pip' 'install' 'pyinstaller>=6.0'
     if ($LASTEXITCODE -ne 0) { throw 'pip install pyinstaller failed.' }
 }
