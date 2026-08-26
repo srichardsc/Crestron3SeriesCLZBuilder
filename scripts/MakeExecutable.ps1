@@ -62,17 +62,21 @@ $entryScript = Join-Path $root 'src\crestron_clz_builder\entry.py'
 Write-Host 'Building single-file executable...'
 # All paths passed to PyInstaller must be absolute: relative --add-data paths
 # are resolved against the spec/workpath directory, not the current location.
-& $venvPython '-m' 'PyInstaller' `
-    '--clean' `
-    '--noconfirm' `
-    '--onefile' `
-    '--name', $name `
-    '--distpath', $outputDir `
-    '--workpath', $buildDir `
-    '--specpath', $buildDir `
-    "--add-data=$signerSource;crestron_clz_builder" `
-    '--hidden-import', 'crestron_clz_builder' `
+# Arguments are passed as a single array so PowerShell never merges or quotes them.
+$pyiArgs = @(
+    '-m', 'PyInstaller',
+    '--clean',
+    '--noconfirm',
+    '--onefile',
+    '--name', $name,
+    '--distpath', $outputDir,
+    '--workpath', $buildDir,
+    '--specpath', $buildDir,
+    "--add-data=$signerSource;crestron_clz_builder",
+    '--hidden-import', 'crestron_clz_builder',
     $entryScript
+)
+& $venvPython @pyiArgs
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed.' }
 
 $executable = Join-Path $outputDir "$name.exe"
