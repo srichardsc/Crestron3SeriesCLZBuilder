@@ -2,22 +2,10 @@
 
 ## [Unreleased]
 
-## [1.2.1] - 2026-08-26
+## [1.2] - 2026-08-26
 
-### Fixed
-
-- `run` now records the version increment BEFORE touching the toolchain gate,
-  so an SDK-less host still gets its bump recorded (regression from 1.2.0
-  caught by public CI: first/second runs kept versions at 1.0.0.0).
-- A missing toolchain during the first-run lock write is now reported as a
-  soft note instead of aborting before the checklist could render.
-
-### Changed
-
-- README now leads with the automatic-version-bump benefit: every uploaded
-  package is accepted by Crestron Home as an update without manual edits.
-
-## [1.2.0] - 2026-08-26
+First publicized update since 1.0.0; includes everything shipped in the
+interim internal releases (previously listed as 1.1.0/1.2.0/1.2.1).
 
 ### Added
 
@@ -29,21 +17,13 @@
   publishes both series targets.
 - Automatic version bump (`bump_version`) with `--no-bump` opt-out; non-numeric
   versions are rejected instead of silently skipping the bump.
-- Concise environment setup guide in the README ("prepare this PC") and a
-  TL;DR two-liner at the top of the first-time guide.
-
-## [1.1.0] - 2026-08-25
-
-### Added
-
 - Guided first-run wizard: `crestron-clz setup` checks the host against every
   toolchain input, creates the project configuration, writes the toolchain lock
   when everything is present, and prints the exact next build command.
-- Full-checklist diagnostics: `doctor` (human mode) now reports ALL missing
-  inputs at once instead of stopping at the first one, each with the expected
-  location, why it matters, and the actionable fix, grouped into public vs
-  licensed components.
-- Numbered build stages (``[3/6] stage: ...``) plus a final summary with assembly
+- Full-checklist diagnostics: `doctor` (human mode) reports ALL missing inputs
+  at once, each with the expected location, why it matters, and an actionable
+  fix, grouped into public vs licensed components.
+- Numbered build stages (`[3/10] stage: ...`) plus a final summary with assembly
   and CLZ SHA-256 hashes, per-target file counts, elapsed time, and explicit
   SIMPL Windows import next steps.
 - `scripts/MakeExecutable.ps1`: builds a single-file Windows executable
@@ -51,13 +31,17 @@
 - `docs/FOR-DUMMIES.md`: zero-knowledge step-by-step guide from clone to
   SIMPL Windows import, including a symptom-based troubleshooting table.
 - `--version` flag on the CLI; doctor JSON reports now include the version.
+- Concise environment setup guide in the README ("prepare this PC") and a
+  TL;DR two-liner at the top of the first-time guide.
 
 ### Changed
 
 - Human-readable doctor output replaced the terse key=value report (use
   `doctor --json` for the previous machine contract).
-- Exit code for a host with missing toolchain inputs is now consistently `2`
+- Exit code for a host with missing toolchain inputs is consistently `2`
   in both human and JSON doctor modes.
+- README leads with the automatic-version-bump benefit: every uploaded package
+  is accepted by Crestron Home as an update without manual edits.
 
 ## [1.0.0] - 2026-08-23
 
