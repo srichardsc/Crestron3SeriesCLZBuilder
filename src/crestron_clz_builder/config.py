@@ -350,7 +350,7 @@ def load_config(path: Path) -> ProjectConfig:
     )
 
 
-def default_config(project: str, modules: list[str], *, name: str | None = None) -> dict[str, Any]:
+def default_config(project: str, modules: list[str], *, name: str | None = None, version: str = "1.0.0.0") -> dict[str, Any]:
     """Return a minimal, explicit schema-1 configuration for ``init``."""
     inferred = name or Path(project).stem
     return {
@@ -358,7 +358,7 @@ def default_config(project: str, modules: list[str], *, name: str | None = None)
         "assembly": {
             "project": project,
             "name": inferred,
-            "version": "1.0.0.0",
+            "version": _string(version, "assembly.version"),
             "minimumFirmware": "1.007.0017",
             "output": "bin/{configuration}/{name}.dll",
         },
@@ -372,3 +372,22 @@ def default_config(project: str, modules: list[str], *, name: str | None = None)
         "toolchain": {"paths": {}},
         "output": {"build": "build", "dist": "dist"},
     }
+
+
+def bump_version(value: str) -> tuple[str, str]:
+    """Increment the last numeric component of a dotted version.
+
+    Returns ``(new_value, previous_value)``. Raises ``ConfigError`` when the
+    value has no dotted-numeric tail (for example ``1.0.0.0-beta``), because
+    Crestron Home requires a strictly higher DriverVersion to accept an
+    updated package.
+    """
+    parts = value.split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        raise ConfigError(f"assembly.version must be dotted numbers for automatic bump: {value}")
+    updated = [*parts]
+    updated[-1] = str(int(updated[-1]) + 1)
+    new_value = ".".join(updated)
+    if len(new_value) > 40:
+        raise ConfigError(f"assembly.version grew beyond 40 characters: {new_value}")
+    return new_value, value

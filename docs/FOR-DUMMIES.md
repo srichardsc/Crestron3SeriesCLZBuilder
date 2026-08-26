@@ -1,5 +1,25 @@
 # CLZ Builder for absolute beginners
 
+## TL;DR — the whole workflow in two lines
+
+One time, on the build PC:
+
+```powershell
+git clone https://github.com/srichardsc/Crestron3SeriesCLZBuilder.git; Set-Location Crestron3SeriesCLZBuilder; .\scripts\Setup.ps1
+```
+
+Every build, forever (from your driver's folder):
+
+```powershell
+C:\path\to\Crestron3SeriesCLZBuilder\.venv\Scripts\python.exe -m crestron_clz_builder run
+```
+
+That is it. First `run` configures everything; every later `run` bumps the
+version so Crestron Home accepts the update, builds and signs the CLZ into
+`dist\series3` and `dist\series4`. The rest of this guide explains each step.
+
+---
+
 This guide assumes you have **never** used the tool, have never heard of a
 Python virtual environment, and just want your SIMPL# driver turned into a
 `.clz` file that SIMPL Windows can load. Follow the steps in order. Do not skip

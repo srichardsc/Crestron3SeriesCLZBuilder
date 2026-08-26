@@ -21,32 +21,39 @@ certificates, private keys, example PSKs, or homemade signer.
 
 ## Quick start
 
-On a Windows development machine:
+### Prepare this PC (one time)
+
+Windows 10/11 x64. Install in this order; then run the checker until it is green.
+
+| # | Install | How |
+| --- | --- | --- |
+| 1 | This builder | `git clone https://github.com/srichardsc/Crestron3SeriesCLZBuilder.git` |
+| 2 | Python + local env | `Set-Location Crestron3SeriesCLZBuilder; .\scripts\Setup.ps1 -InstallOpenSource` |
+| 3 | MSBuild | `.\scripts\Setup.ps1 -InstallBuildTools` |
+| 4 | .NET Framework 3.5 feature | `.\scripts\Setup.ps1 -EnableNetFx3` (elevated) |
+| 5 | SIMPL Windows, SIMPL# SDK, Cresdb, CF 3.5 | licensed installer(s) from your authorized Crestron dealer channel |
+| 6 | Verify | `.\.venv\Scripts\python.exe -m crestron_clz_builder setup` — green checklist = done |
+
+Full details: [`docs/INSTALLATION.md`](docs/INSTALLATION.md). The tool checks what
+is missing and tells you exactly what to install; it never downloads Crestron software.
+
+### Build a driver (every time)
+
+Copy your driver folder anywhere, open a terminal **in that folder**, run:
 
 ```powershell
-git clone https://github.com/srichardsc/Crestron3SeriesCLZBuilder.git
-Set-Location .\Crestron3SeriesCLZBuilder
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# Create an isolated .venv, install this local package, and inspect the host.
-# The script does not install or modify the Crestron SDK.
-.\scripts\Setup.ps1
-
-# Guided setup: finds your project, checks all 24 toolchain inputs, prints
-# the exact fix for every missing component, then prepares config + lock.
-.\.venv\Scripts\python.exe -m crestron_clz_builder setup
-
-# Build selected targets and output defined by that configuration.
-.\scripts\Build.ps1 -Config .\clz-builder.json
-
-# Two clean builds and SHA-256 comparison before publication.
-.\scripts\Build.ps1 -Config .\clz-builder.json -VerifyReproducible
+<path-to-builder>\.venv\Scripts\python.exe -m crestron_clz_builder run
 ```
 
-Never used this kind of tool before? Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md)
-instead: it explains every step from clone to SIMPL Windows import. Prefer no
-Python on the build machine? Generate a single-file executable with
-`.\scripts\MakeExecutable.ps1` and run `clz-builder.exe setup`.
+First run creates the configuration and lock automatically. Every run increments
+the version so Crestron Home accepts the uploaded package as an update, compiles,
+signs with the official SDK service, and writes `dist\series3\*.clz` and
+`dist\series4\*.clz`. Done.
+
+With the PowerShell wrapper instead: `<path-to-builder>\scripts\Run.ps1`.
+Never used the tool before? Follow [`docs/FOR-DUMMIES.md`](docs/FOR-DUMMIES.md).
+Prefer no Python on the build machine? Generate a single-file executable with
+`.\scripts\MakeExecutable.ps1` and copy `dist-exe\clz-builder.exe` next to your driver.
 
 Replace example names with the files in the selected project. If `Setup.ps1`
 reports missing proprietary components, follow

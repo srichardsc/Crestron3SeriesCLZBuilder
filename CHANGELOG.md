@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-26
+
+### Added
+
+- One-command build: `crestron-clz run` (or `scripts\Run.ps1`). Drop a driver
+  folder, open a terminal there, run it: on first use it creates the project
+  configuration and the initial toolchain lock automatically; every later use
+  increments `assembly.version` so Crestron Home accepts the uploaded package
+  as an update, then compiles, signs with the official SDK service and
+  publishes both series targets.
+- Automatic version bump (`bump_version`) with `--no-bump` opt-out; non-numeric
+  versions are rejected instead of silently skipping the bump.
+- Concise environment setup guide in the README ("prepare this PC") and a
+  TL;DR two-liner at the top of the first-time guide.
+
 ## [1.1.0] - 2026-08-25
 
 ### Added

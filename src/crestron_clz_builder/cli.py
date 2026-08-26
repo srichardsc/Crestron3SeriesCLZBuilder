@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
 from . import __version__
 from .builder import BuildError, BuildOptions, build
-from .config import ConfigError, default_config, load_config
+from .config import ConfigError, bump_version, default_config, load_config
 from .toolchain import (
     ToolchainProbe,
     ToolchainError,
@@ -59,6 +60,16 @@ def _parser() -> argparse.ArgumentParser:
     lock = sub.add_parser("lock", help="write or verify the toolchain lock")
     lock.add_argument("--config", default="clz-builder.json")
     lock.add_argument("--verify", action="store_true", help="verify existing lock instead of writing it")
+
+    run = sub.add_parser("run", help="one-command build: auto-configures, bumps the version so Crestron Home accepts the update, compiles, signs and publishes")
+    run.add_argument("--project", help="path to the SIMPL# .csproj; defaults to the configured project or the only .csproj found")
+    run.add_argument("--module", action="append", default=[], dest="modules", help=".usp source; repeatable; only used when creating the configuration")
+    run.add_argument("--name", help="assembly filename stem; only used when creating the configuration")
+    run.add_argument("--config", default="clz-builder.json")
+    run.add_argument("--configuration", choices=("Debug", "Release"), default="Release")
+    run.add_argument("--targets", help="comma-separated target list; defaults to config targets")
+    run.add_argument("--no-bump", action="store_true", help="keep the existing version instead of incrementing it")
+    run.add_argument("--verify-reproducible", action="store_true")
 
     build_parser = sub.add_parser("build", help="compile, sign, package, validate and publish")
     build_parser.add_argument("--config", default="clz-builder.json")
@@ -331,6 +342,97 @@ def _build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_csproj(root: Path) -> list[Path]:
+    return sorted(
+        (
+            path
+            for path in root.rglob("*.csproj")
+            if not {part.lower() for part in path.parts}.intersection({"bin", "obj", "build", "build-exe", "dist", "dist-exe", ".venv"})
+        ),
+        key=lambda path: path.relative_to(root).as_posix(),
+    )
+
+
+def _write_config(config_path: Path, project_text: str, modules: list[str], name: str | None) -> None:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(default_config(project_text, modules, name=name), indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def _run_command(args: argparse.Namespace) -> int:
+    root = Path.cwd().resolve()
+    config_path = Path(args.config)
+    if not config_path.is_absolute():
+        config_path = root / config_path
+    config_path = config_path.resolve()
+
+    # 1. Configuration: create it on first run, reuse it afterwards.
+    created_config = False
+    if not config_path.exists():
+        project_text = args.project
+        if not project_text:
+            projects = _find_csproj(root)
+            if len(projects) == 1:
+                project_text = projects[0].relative_to(root).as_posix()
+            elif not projects:
+                raise ConfigError(f"no .csproj found under {root}; pass --project explicitly")
+            else:
+                print("Found SIMPL# projects; pass one explicitly or remove the extra ones:")
+                for path in projects:
+                    print(f"  - {path.relative_to(root).as_posix()}")
+                raise ConfigError("multiple .csproj candidates; pass --project <path>")
+        resolved_project = Path(project_text)
+        if not resolved_project.is_absolute():
+            resolved_project = root / resolved_project
+        if not resolved_project.is_file():
+            raise ConfigError(f"project input not found: {resolved_project}")
+        _write_config(config_path, _relative_to(config_path, str(resolved_project), "--project"), list(args.modules), args.name)
+        created_config = True
+        print(f"created configuration: {config_path}")
+    elif args.project or args.modules or args.name:
+        print("note: --project/--module/--name are ignored because the configuration already exists.")
+
+    config = load_config(_config_path(str(config_path)))
+
+    # First run on a new configuration: discover the toolchain, write the
+    # initial lock automatically, then continue. Later builds verify against
+    # that lock like a deliberate `build` would.
+    if created_config or not config.resolved_lock_path.is_file():
+        from .toolchain import resolve_tools as _resolve, write_lock as _write_lock
+        tools = _resolve(config)
+        lock_path = _write_lock(config, tools)
+        print(f"wrote toolchain lock: {lock_path}")
+
+    # 2. Version bump so Crestron Home accepts the package as an update.
+    previous_version = config.version
+    if args.no_bump:
+        new_version = previous_version
+    else:
+        new_version, previous_version = bump_version(previous_version)
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+        raw["assembly"]["version"] = new_version
+        temporary = config_path.with_name(f"{config_path.name}.tmp-{os.getpid()}".replace("/", "-"))
+        try:
+            temporary.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8", newline="\n")
+            os.replace(str(temporary), str(config_path))
+        except OSError as error:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+            raise ConfigError(f"cannot update version in {config_path}: {error}") from error
+        config = load_config(_config_path(str(config_path)))
+        print(f"version: {previous_version} -> {new_version} (Crestron Home will treat it as an update)")
+
+    # 3. Build with the standard gates.
+    targets = tuple(item.strip().lower() for item in args.targets.split(",") if item.strip()) if args.targets else ()
+    build(config, BuildOptions(args.configuration, targets, args.verify_reproducible, True, False))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -344,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
             return _lock(args)
         if args.command == "build":
             return _build(args)
+        if args.command == "run":
+            return _run_command(args)
         raise ConfigError(f"unsupported command: {args.command}")
     except (ConfigError, ToolchainError, BuildError, OSError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
