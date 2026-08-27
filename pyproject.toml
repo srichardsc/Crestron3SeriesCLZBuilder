@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crestron-3series-clz-builder"
-version = "1.2.1"
+dynamic = ["version"]
 description = "Reproducible CLZ builder for Crestron 3-Series SIMPL# projects"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -30,6 +30,12 @@ Issues = "https://github.com/srichardsc/Crestron3SeriesCLZBuilder/issues"
 
 [project.scripts]
 crestron-clz = "crestron_clz_builder.cli:main"
+
+[tool.setuptools.dynamic]
+# Single source of truth for the version: src/crestron_clz_builder/__init__.py (__version__).
+# pyproject no longer carries a hardcoded version, so workflow-only/docs changes
+# never bump or downgrade the released software version.
+version = { attr = "crestron_clz_builder.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
