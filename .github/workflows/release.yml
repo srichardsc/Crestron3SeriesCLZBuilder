@@ -20,42 +20,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Sync package version to tag
-        shell: pwsh
-        run: |
-          $tag = $env:GITHUB_REF_NAME -replace '^v',''
-          $content = Get-Content -LiteralPath pyproject.toml -Raw
-          if ($content -match 'version = "([^"]+)"') {
-            $current = $Matches[1]
-            if ($current -ne $tag) {
-              Write-Host "Syncing pyproject version $current -> $tag"
-              (Get-Content -LiteralPath pyproject.toml) -replace 'version = ".*"', "version = `"$tag`"" | Set-Content -LiteralPath pyproject.toml -Encoding utf8
-            } else {
-              Write-Host "pyproject version already $current"
-            }
-            Select-String -Pattern '^version = ' -Path pyproject.toml
-          }
-
       - name: Install package without proprietary dependencies
         shell: pwsh
         run: |
           python -m pip install --no-deps .
-          python -m pip install pyinstaller build
-
-      - name: Build Python distribution (sdist + wheel)
-        shell: pwsh
-        run: |
-          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          python -m build --outdir dist
-          Write-Host "--- dist contents ---"
-          Get-ChildItem dist | Format-Table Name, Length
-          $sums = Join-Path (Resolve-Path dist).Path 'SHA256SUMS.txt'
-          Remove-Item -LiteralPath $sums -ErrorAction SilentlyContinue
-          foreach ($f in Get-ChildItem dist -File) {
-            $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
-            "$h  $($f.Name)" | Out-File -Append -Encoding ascii $sums
-          }
-          Get-Content $sums
+          python -m pip install pyinstaller
 
       - name: Build single-file executable
         shell: pwsh
@@ -75,17 +44,13 @@ jobs:
           "$hash  clz-builder.exe" | Out-File -Encoding ascii .\dist-exe\clz-builder.exe.sha256
           Get-Content .\dist-exe\clz-builder.exe.sha256
 
-      - name: Create GitHub Release with executable + Python package
+      - name: Create GitHub Release with the executable
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $distFiles = @(Get-ChildItem dist -File | ForEach-Object { $_.FullName })
-          $assets = @('.\dist-exe\clz-builder.exe', '.\dist-exe\clz-builder.exe.sha256') + $distFiles
-          Write-Host "Publishing assets:"
-          $assets | ForEach-Object { Write-Host "  $_" }
           gh release create "$tag" `
             --title "$tag" `
-            --notes "Standalone Windows build of this tag. Download **clz-builder.exe** (no Python needed) or the Python package from **dist** (sdist .tar.gz + wheel .whl). Verify downloads with clz-builder.exe.sha256 / dist/SHA256SUMS.txt. Copy clz-builder.exe next to your driver and run ``clz-builder.exe setup`` then ``clz-builder.exe run``. Licensed Crestron toolchain must be installed on the host." `
-            @assets
+            --notes "Standalone Windows build of this tag. Download **clz-builder.exe**, copy it next to your driver folder and run `clz-builder.exe setup` then `clz-builder.exe run`. Verify the download with clz-builder.exe.sha256 (SHA-256). Requires no Python; licensed Crestron toolchain must be installed on the host." `
+            .\dist-exe\clz-builder.exe .\dist-exe\clz-builder.exe.sha256
