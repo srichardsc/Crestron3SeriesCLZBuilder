@@ -16,59 +16,28 @@ update.**
 > Home it is always treated as an update and reloaded - no manual version
 > editing, no ignored uploads because the version did not change.
 
-## Quick start
+<p align="center">
+  <img src="docs/assets/clz-builder-terminal.png" alt="Crestron CLZ Builder Interactive Terminal" width="850">
+</p>
 
-### Prepare this PC (one time)
-
-Windows 10/11 x64. Install in this order; then run the checker until it is green.
-
-| # | Install | How |
-| --- | --- | --- |
-| 1 | This builder | `git clone https://github.com/srichardsc/Crestron3SeriesCLZBuilder.git` |
-| 2 | Python + local env | `Set-Location Crestron3SeriesCLZBuilder; .\scripts\Setup.ps1 -InstallOpenSource` |
-| 3 | MSBuild | `.\scripts\Setup.ps1 -InstallBuildTools` |
-| 4 | .NET Framework 3.5 feature | `.\scripts\Setup.ps1 -EnableNetFx3` (elevated) |
-| 5 | SIMPL Windows, SIMPL# SDK, Cresdb, CF 3.5 | licensed installer(s) from your authorized Crestron dealer channel |
-| 6 | Verify | `.\.venv\Scripts\python.exe -m crestron_clz_builder setup` — green checklist = done |
-
-Full details: [`docs/INSTALLATION.md`](docs/INSTALLATION.md). The tool checks what
-is missing and tells you exactly what to install; it never downloads Crestron software.
-
-### Build a driver (every time)
-
-Copy your driver folder anywhere, open a terminal **in that folder**, run:
-
-```powershell
-<path-to-builder>\.venv\Scripts\python.exe -m crestron_clz_builder run
-```
-
-First run creates the configuration and lock automatically. Every run
-**increments the driver version automatically** (`version: 1.0.0.1 -> 1.0.0.2`),
-so Crestron Home always accepts the uploaded package as an update and reloads
-the driver - then compiles, signs with the official SDK service, and writes
-`dist\series3\*.clz` and `dist\series4\*.clz`. Done.
-
-With the PowerShell wrapper instead: `<path-to-builder>\scripts\Run.ps1`.
-
-## Download clz-builder.exe (no Python needed)
+## The Easiest Way: Standalone Interactive Terminal (No Python)
 
 Every tagged release ships a ready-to-run Windows executable built by CI:
 
 1. Download [`clz-builder.exe`](../../releases/latest) (plus its `.sha256`) from Releases.
 2. Copy it into your driver's folder.
-3. Open a terminal there and run:
+3. **Double-click `clz-builder.exe`** (or run `.\clz-builder.exe` in terminal).
 
-```powershell
-clz-builder.exe setup   # first time: checks this PC and prepares the config
-clz-builder.exe run     # every build: new version + signed CLZ for series3 & series4
-```
+That's it! An interactive English-language console menu opens:
+- **Need SIMPL# Pro SDK?** Drop `crestron_simpl_sharp_pro_*.exe` next to `clz-builder.exe` and select **[4]** to auto-install it without requiring Visual Studio 2008.
+- **First time setup?** Select **[2] Guided Setup Wizard** to configure your `.csproj` and `.usp` modules.
+- **Ready to build?** When configured, the console says:
+  ```text
+  >>> Everything is ready. Just press [Enter] to Recompile.
+  ```
+- **Fast Developer Loop:** Simply press **[Enter]** to build, sign, and package. Make changes in your code editor, switch back to the console, and press **[Enter]** again to recompile immediately!
 
-The executable is produced from this exact source by the `release` workflow;
-verify your download against the published SHA-256. You can also build it
-yourself at any time with `.\scripts\MakeExecutable.ps1`.
-
-The licensed Crestron toolchain (SIMPL Windows, SIMPL# SDK, Cresdb, CF 3.5)
-still must be installed on the host; the exe replaces only the Python runtime.
+*Prefer CLI / CI/CD scripts?* All commands (`clz-builder run`, `build`, `setup`, `doctor`, `install-prereqs`) remain 100% available via standard command-line flags.
 
 ## How it works
 

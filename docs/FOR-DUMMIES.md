@@ -98,6 +98,26 @@ portable executable and copy it wherever you like:
 # produces dist-exe\clz-builder.exe — a single file, no Python needed to run it
 ```
 
+---
+
+## The Easiest Way: Standalone Interactive Terminal
+
+If you are using `clz-builder.exe`, you do not need to memorize commands:
+
+1. Copy `clz-builder.exe` into your driver folder.
+2. Double-click it (or open PowerShell in that folder and run `.\clz-builder.exe`).
+3. An interactive English-language terminal menu will open:
+   - **Missing SIMPL# SDK?** Place `crestron_simpl_sharp_pro_*.exe` in the same folder and select **[4]** to auto-install it without requiring Visual Studio 2008.
+   - **First time?** Select **[2] Guided Setup Wizard** to detect your `.csproj` and configure `clz-builder.json`.
+   - **Ready to build?** When everything is ready, the menu displays:
+     ```text
+     >>> Everything is ready. Just press [Enter] to Recompile.
+     ```
+   - Simply press **[Enter]** to build, bump version, sign, and package into `dist\`.
+   - **Fast Developer Loop**: After compilation finishes, make changes to your C# code in your editor and hit **[Enter]** again in the console to recompile immediately!
+
+---
+
 ## Step 2 — Let the wizard check your PC
 
 From the repository folder:
@@ -214,6 +234,7 @@ python -m crestron_clz_builder build --config clz-builder.json --targets series4
 | Symptom | Meaning | Fix |
 | --- | --- | --- |
 | `setup` lists missing items | those components are not installed (or paths moved) | follow each printed `fix:` line |
+| SIMPL# installer asks for Visual Studio 2008 | Crestron's installer checks for legacy VS2008 SP1 | Place `crestron_simpl_sharp_pro_*.exe` in the app directory and run `clz-builder setup` (or `clz-builder install-prereqs`) to auto-install |
 | `toolchain lock missing` | first build on this host | run the command printed next to the message (the `lock` subcommand), or rerun `setup` |
 | `toolchain input changed (...)` | an SDK/tool binary changed after the lock was written | intentional update? run the `lock` subcommand deliberately; otherwise investigate |
 | `command failed (...): MSBuild` | your C# does not compile | read the MSBuild errors above the message |

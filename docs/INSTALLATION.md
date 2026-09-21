@@ -56,10 +56,29 @@ vendor binaries.
 Install the following components on the licensed Windows build host:
 
 1. SIMPL Windows, including `SPlusCC.exe`, Crestron's SIMPL+ compiler.
-2. The matching SIMPL# SDK and `SIMPLSharpService` assemblies.
+2. The matching SIMPL# SDK and `SIMPLSharpService` assemblies (see below for auto-install without VS2008).
 3. Cresdb Programming data, including Required References and Required Project
    Files.
 4. .NET Compact Framework 3.5 reference assemblies and compiler integration.
+
+### Installing SIMPL# Pro without Visual Studio 2008
+
+Crestron's official `SW-SIMPL-SHARP-PRO` package (`crestron_simpl_sharp_pro_*.exe`) historically required Visual Studio 2008 SP1 to be installed, checking `HKLM\SOFTWARE\WOW6432Node\Microsoft\DevDiv\VS\Servicing\9.0` (`SP` = 1). Since VS2008 is long discontinued, `clz-builder` automates this requirement:
+
+1. Download the official installer (`crestron_simpl_sharp_pro_*.exe`) using your authorized Crestron Dealer portal account. Do **not** commit this file to Git.
+2. Place the downloaded `.exe` in the same directory as `clz-builder.exe` (or in `.source/`).
+3. Run:
+   ```cmd
+   clz-builder
+   # launches the interactive terminal: choose [4] to install SDK, or [Enter] when ready
+   # or directly via command line:
+   clz-builder install-prereqs
+   ```
+   Or via the PowerShell setup helper:
+   ```powershell
+   .\scripts\Setup.ps1 -InstallSimplSharp
+   ```
+   The tool automatically sets the servicing registry bypass and executes the official installer silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`).
 
 The checker looks for the following standard locations under
 `%ProgramFiles(x86)%\Crestron` and `%WINDIR%`:

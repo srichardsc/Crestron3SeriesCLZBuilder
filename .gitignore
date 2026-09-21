@@ -20,6 +20,7 @@ obj/
 # Local toolchain discovery; contains absolute paths for one PC.
 .clz-builder/
 toolchain.local.json
+.source/
 
 # Generated/proprietary package output. Review license before force-adding.
 *.clz

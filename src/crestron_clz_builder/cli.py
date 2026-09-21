@@ -36,7 +36,11 @@ def _load(value: str):
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="crestron-clz", description="Build deterministic CLZ packages with an installed Crestron toolchain")
     parser.add_argument("--version", action="version", version=f"crestron-clz {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--interactive", "-i", action="store_true", help="launch the interactive console menu")
+    sub = parser.add_subparsers(dest="command", required=False)
+
+    sub.add_parser("menu", help="launch the interactive console menu")
+    sub.add_parser("interactive", help="launch the interactive console menu")
 
     init = sub.add_parser("init", help="write a versioned project configuration")
     init.add_argument("--config", default="clz-builder.json")
@@ -56,6 +60,12 @@ def _parser() -> argparse.ArgumentParser:
     setup.add_argument("--name", help="assembly filename stem (defaults to project filename stem)")
     setup.add_argument("--force", action="store_true", help="regenerate the configuration even if it exists")
     setup.add_argument("--non-interactive", action="store_true", help="never prompt; select defaults or fail instead of asking")
+    setup.add_argument("--auto-install", action="store_true", help="automatically install SIMPL# Pro if an installer .exe is found")
+
+    install_prereqs = sub.add_parser("install-prereqs", help="install SIMPL# Pro from a local installer without Visual Studio 2008")
+    install_prereqs.add_argument("--installer", help="explicit path to crestron_simpl_sharp_pro_*.exe")
+    install_prereqs.add_argument("--yes", "-y", action="store_true", help="proceed without interactive prompt")
+    install_prereqs.add_argument("--force", action="store_true", help="reinstall even if already detected")
 
     lock = sub.add_parser("lock", help="write or verify the toolchain lock")
     lock.add_argument("--config", default="clz-builder.json")
@@ -134,6 +144,19 @@ def _print_checklist(probes: list[ToolchainProbe]) -> int:
             for component in licensed:
                 print(f"  - {component}")
         print("see docs/INSTALLATION.md for supported installation paths; this tool never downloads Crestron software.")
+        simpl_missing = any(not probe.ok and ("SIMPL# SDK" in probe.component or probe.name in ("services", "compiler")) for probe in missing)
+        if simpl_missing:
+            from .installer import find_simpl_sharp_installer
+            installer = find_simpl_sharp_installer()
+            print("")
+            if installer:
+                print(f"[FOUND] Crestron SIMPL# Pro installer detected: {installer.name}")
+                print("        Run 'crestron-clz install-prereqs' or 'crestron-clz setup' to auto-install it without Visual Studio 2008.")
+            else:
+                print("[NOTE] SIMPL# Pro SDK is missing:")
+                print("       1. Download 'SW-SIMPL-SHARP-PRO' (crestron_simpl_sharp_pro_*.exe) from your Crestron Dealer portal.")
+                print("       2. Place the installer .exe in the same folder as this application (or in .source/).")
+                print("       3. Run 'crestron-clz setup' to auto-install it without requiring Visual Studio 2008.")
     return 2 if missing else 0
 
 
@@ -301,6 +324,28 @@ def _setup_wizard(args: argparse.Namespace) -> int:
     if created_config:
         print(f"created configuration: {config_path}")
 
+    # Step 3b: If toolchain check failed and SIMPL# Pro installer is present, offer auto-installation
+    if exit_code != 0:
+        from .installer import find_simpl_sharp_installer, install_simpl_sharp_pro
+        installer = find_simpl_sharp_installer()
+        auto_install = getattr(args, "auto_install", False)
+        if installer:
+            should_install = auto_install
+            if not should_install and interactive:
+                answer = _prompt(
+                    f"\nFound Crestron SIMPL# Pro installer: {installer.name}\nAuto-install it now without Visual Studio 2008? (y/n)",
+                    default="y",
+                )
+                should_install = answer is not None and answer.lower().startswith("y")
+            if should_install:
+                print(f"\nInstalling SIMPL# Pro from {installer.name} (bypassing VS2008 requirement)...")
+                ok, msg = install_simpl_sharp_pro(installer)
+                if ok:
+                    print("SIMPL# Pro installed successfully! Refreshing checklist...\n")
+                    exit_code = _print_checklist(probe_toolchain(config))
+                else:
+                    print(f"Auto-installation failed: {msg}")
+
     # Step 4: when everything is present, write the lock and hand off to build.
     if exit_code == 0:
         try:
@@ -437,8 +482,62 @@ def _run_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _install_prereqs(args: argparse.Namespace) -> int:
+    from .installer import find_simpl_sharp_installer, install_simpl_sharp_pro, is_simpl_sharp_installed
+    if is_simpl_sharp_installed() and not args.force:
+        print("Crestron SIMPL# Pro SDK is already installed on this machine (pass --force to reinstall).")
+        return 0
+
+    installer = Path(args.installer).resolve() if args.installer else find_simpl_sharp_installer()
+    if not installer or not installer.is_file():
+        print("error: Crestron SIMPL# Pro installer (.exe) not found.")
+        print("")
+        print("Action required:")
+        print("  1. Download 'SW-SIMPL-SHARP-PRO' (e.g. crestron_simpl_sharp_pro_*.exe) from your Crestron Dealer portal.")
+        print("  2. Place the downloaded .exe in this directory (or in .source/).")
+        print("  3. Run 'crestron-clz install-prereqs' again.")
+        return 2
+
+    if not args.yes:
+        answer = _prompt(f"Found installer '{installer.name}'. Install SIMPL# Pro without Visual Studio 2008? (y/n)", default="y")
+        if not answer or not answer.lower().startswith("y"):
+            print("Installation cancelled.")
+            return 1
+
+    print(f"Installing SIMPL# Pro from {installer.name} (bypassing VS2008 requirement)...")
+    ok, msg = install_simpl_sharp_pro(installer)
+    if ok:
+        print("Success: SIMPL# Pro installed successfully.")
+        return 0
+    print(f"error: {msg}")
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    raw_args = list(sys.argv[1:]) if argv is None else list(argv)
+
+    if not raw_args:
+        # User ran executable without arguments (e.g. double-click or no flags)
+        if sys.stdin and hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
+            from .menu import run_interactive_menu
+            return run_interactive_menu()
+        parser.print_help()
+        return 2
+
+    args = parser.parse_args(raw_args)
+
+    if getattr(args, "interactive", False) or args.command in ("menu", "interactive"):
+        from .menu import run_interactive_menu
+        return run_interactive_menu()
+
+    if not args.command:
+        if sys.stdin and hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
+            from .menu import run_interactive_menu
+            return run_interactive_menu()
+        parser.print_help()
+        return 2
+
     try:
         if args.command == "init":
             return _init(args)
@@ -446,6 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             return _doctor(args)
         if args.command == "setup":
             return _setup_wizard(args)
+        if args.command == "install-prereqs":
+            return _install_prereqs(args)
         if args.command == "lock":
             return _lock(args)
         if args.command == "build":

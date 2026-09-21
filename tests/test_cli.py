@@ -19,3 +19,23 @@ class CliTests(unittest.TestCase):
             text = (root / "builder.json").read_text(encoding="utf-8")
             self.assertIn('"schema": 1', text)
             self.assertIn('"modules": []', text)
+
+    def test_main_empty_args_non_interactive(self) -> None:
+        from unittest.mock import MagicMock, patch
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = False
+        with patch("sys.stdin", mock_stdin), patch("sys.stdout"):
+            self.assertEqual(main([]), 2)
+
+    def test_main_menu_subcommand(self) -> None:
+        from unittest.mock import patch
+        with patch("crestron_clz_builder.menu.run_interactive_menu", return_value=0) as mock_menu:
+            self.assertEqual(main(["menu"]), 0)
+            mock_menu.assert_called_once()
+
+    def test_main_interactive_flag(self) -> None:
+        from unittest.mock import patch
+        with patch("crestron_clz_builder.menu.run_interactive_menu", return_value=0) as mock_menu:
+            self.assertEqual(main(["--interactive"]), 0)
+            mock_menu.assert_called_once()
+

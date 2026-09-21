@@ -10,6 +10,9 @@ param(
     [switch] $InstallBuildTools,
 
     [Parameter()]
+    [switch] $InstallSimplSharp,
+
+    [Parameter()]
     [switch] $EnableNetFx3,
 
     [Parameter()]
@@ -101,6 +104,64 @@ if ($InstallBuildTools) {
     Invoke-WingetInstall -Id 'Microsoft.VisualStudio.2022.BuildTools' -Override '--wait --passive --add Microsoft.VisualStudio.Workload.MSBuildTools --includeRecommended'
 }
 
+function Find-SimplSharpInstaller {
+    param([string] $RootDirectory)
+    $searchDirs = @(
+        $RootDirectory,
+        (Join-Path $RootDirectory '.source')
+    )
+    foreach ($dir in $searchDirs) {
+        if (Test-Path -LiteralPath $dir -PathType Container) {
+            $candidates = Get-ChildItem -Path $dir -Filter "*simpl_sharp*.exe" -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notlike "clz-builder*" -and $_.Name -notlike "test*" }
+            if ($candidates) { return $candidates[0].FullName }
+        }
+    }
+    return $null
+}
+
+function Install-SimplSharpPro {
+    param(
+        [Parameter(Mandatory)] [string] $InstallerPath
+    )
+    if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
+        throw "Installer file not found: $InstallerPath"
+    }
+
+    Write-Host 'Applying VS2008 SP1 registry bypass (HKLM:\SOFTWARE\WOW6432Node\Microsoft\DevDiv\VS\Servicing\9.0)...'
+    $regSubkeys = @(
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\DevDiv\VS\Servicing\9.0',
+        'HKLM:\SOFTWARE\Microsoft\DevDiv\VS\Servicing\9.0'
+    )
+    foreach ($key in $regSubkeys) {
+        if (-not (Test-Path -LiteralPath $key)) {
+            New-Item -Path $key -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        Set-ItemProperty -Path $key -Name 'SP' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    $leafName = Split-Path -Leaf $InstallerPath
+    Write-Host "Running official Crestron SIMPL# Pro installer silently: $leafName..."
+    if (Test-Administrator) {
+        $proc = Start-Process -FilePath $InstallerPath -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -Wait -PassThru
+    } else {
+        Write-Host "Requesting Administrator elevation for official installer..."
+        $proc = Start-Process -FilePath $InstallerPath -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -Verb RunAs -Wait -PassThru
+    }
+    if ($proc.ExitCode -ne 0) {
+        throw "SIMPL# Pro installer failed with exit code $($proc.ExitCode)."
+    }
+    Write-Host 'SIMPL# Pro installation finished.' -ForegroundColor Green
+}
+
+if ($InstallSimplSharp) {
+    $foundInstaller = Find-SimplSharpInstaller -RootDirectory $rootPath
+    if (-not $foundInstaller) {
+        throw "SIMPL# Pro installer not found in $rootPath or $rootPath\.source. Place crestron_simpl_sharp_pro_*.exe in the project folder and rerun."
+    }
+    Install-SimplSharpPro -InstallerPath $foundInstaller
+}
+
 if ($EnableNetFx3) {
     if (-not (Test-Administrator)) {
         throw '-EnableNetFx3 requires an elevated PowerShell window (Administrator).'
@@ -149,6 +210,8 @@ Write-Host ''
 Write-Host 'Proprietary manual steps:' -ForegroundColor Yellow
 Write-Host '  1. Install licensed SIMPL Windows/SPlusCC for the supported release.'
 Write-Host '  2. Install the matching SIMPL# SDK / SIMPLSharpService and Cresdb.'
+Write-Host '     (Tip: To auto-install SIMPL# Pro without VS2008, place the dealer installer'
+Write-Host '      crestron_simpl_sharp_pro_*.exe in this folder and rerun with -InstallSimplSharp).'
 Write-Host '  3. Install or expose .NET Compact Framework 3.5 references.'
 Write-Host '  4. Re-run Setup.ps1 with -Config until doctor reports the expected inputs.'
 
