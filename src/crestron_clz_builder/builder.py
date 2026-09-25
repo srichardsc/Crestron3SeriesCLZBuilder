@@ -366,7 +366,13 @@ def _build_once(config: ProjectConfig, tools: Mapping[str, Path], options: Build
     helper = _ensure_signer(tools, root)
     mvid = stable_mvid(config, config.resolved_lock_path, assembly_name)
     reporter.begin("stage: patch MVID and sign with the official SIMPL# service")
-    _run([helper, "patch", main, tools["cecil"], tools["custom_attributes"], mvid], cwd=config.root)
+    _run(
+        [
+            helper, "patch", main, tools["cecil"], tools["custom_attributes"], mvid,
+            tools["services"], tools["compiler"], tools["cresdb"],
+        ],
+        cwd=config.root,
+    )
     _run([helper, "sign", main, tools["compiler"], tools["services"], tools["ionic"], main.parent, tools["cresdb"], OFFICIAL_SIGNER_THUMBPRINT], cwd=config.root)
 
     stage_dir = root / "clz" / "staging"

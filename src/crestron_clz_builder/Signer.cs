@@ -9,16 +9,22 @@ using Mono.Cecil;
 // signing method uses a certificate that SPlusCC rejects for SIMPL# libraries.
 internal static class Signer
 {
-    private const string SandboxHash = "FEF3EC6A8B41FAAE853038E36BD694975614AB5FAE643DB761EEBB9AB5C69EA5";
+    private const string FallbackSandboxHash = "FEF3EC6A8B41FAAE853038E36BD694975614AB5FAE643DB761EEBB9AB5C69EA5";
     private const string OfficialSignerThumbprint = "258CCE9B7DA79C8D5C33431BDA2DD32CB64AEC7D";
 
     private static int Main(string[] args)
     {
         try
         {
+            if (args.Length == 8 && string.Equals(args[0], "patch", StringComparison.OrdinalIgnoreCase))
+            {
+                Patch(args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+                Console.WriteLine("metadata=patched");
+                return 0;
+            }
             if (args.Length == 5 && string.Equals(args[0], "patch", StringComparison.OrdinalIgnoreCase))
             {
-                Patch(args[1], args[2], args[3], args[4]);
+                PatchLegacy(args[1], args[2], args[3], args[4]);
                 Console.WriteLine("metadata=patched");
                 return 0;
             }
@@ -27,7 +33,7 @@ internal static class Signer
                 Sign(args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
                 return 0;
             }
-            Console.Error.WriteLine("usage: Signer.exe patch <assembly> <Mono.Cecil.dll> <CustomAttributes.dll> <stable-mvid>");
+            Console.Error.WriteLine("usage: Signer.exe patch <assembly> <Mono.Cecil.dll> <CustomAttributes.dll> <stable-mvid> <Services.dll> <CSharpCompiler.dll> <Cresdb>");
             Console.Error.WriteLine("   or: Signer.exe sign <assembly> <CSharpCompiler.dll> <Services.dll> <Ionic.Zip.dll> <workDir> <Cresdb> <thumbprint>");
             return 2;
         }
@@ -53,11 +59,142 @@ internal static class Signer
                 if (string.Equals(Path.GetFileNameWithoutExtension(candidate), requested.Name, StringComparison.OrdinalIgnoreCase))
                     return Assembly.LoadFrom(candidate);
             }
+            for (int index = 0; index < paths.Length; index++)
+            {
+                string candidate = paths[index];
+                if (candidate == null || !File.Exists(candidate)) continue;
+                string dir = Path.GetDirectoryName(candidate);
+                if (dir != null && Directory.Exists(dir))
+                {
+                    string target = Path.Combine(dir, requested.Name + ".dll");
+                    if (File.Exists(target))
+                        return Assembly.LoadFrom(target);
+                }
+            }
             return null;
         };
     }
 
-    private static void Patch(string assemblyPath, string cecilPath, string customAttributesPath, string mvidText)
+    private static void ApplySandboxAttribute(AssemblyDefinition definition, MethodDefinition constructor, string servicesPath, string compilerPath, string cresdbPath, string workDir)
+    {
+        Assembly.LoadFrom(servicesPath);
+        Assembly compilerAssembly = Assembly.LoadFrom(compilerPath);
+
+        Type helperType = compilerAssembly.GetType("CSharpCompiler.CLZManagementHelper", true);
+        ConstructorInfo helperCtor = helperType.GetConstructor(new[] { typeof(string), typeof(string), typeof(bool), typeof(bool), typeof(bool) });
+        if (helperCtor == null) throw new InvalidOperationException("CLZManagementHelper constructor not found");
+        object helper = helperCtor.Invoke(new object[] { Path.GetFullPath(workDir), Path.GetFullPath(cresdbPath), false, false, false });
+
+        FieldInfo serviceField = helperType.GetField("_simplSharpService", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (serviceField == null) throw new InvalidOperationException("CLZManagementHelper._simplSharpService not found");
+        object service = serviceField.GetValue(helper);
+
+        MethodInfo eMethod = service.GetType().GetMethod("e", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (eMethod == null) throw new InvalidOperationException("SIMPLSharpService.e method not found");
+        object fInstance = eMethod.Invoke(service, null);
+
+        MethodInfo bMethod = null;
+        MethodInfo cMethod = null;
+        foreach (MethodInfo m in fInstance.GetType().GetMethods(BindingFlags.Instance | BindingFlags.NonPublic))
+        {
+            ParameterInfo[] parameters = m.GetParameters();
+            if (parameters.Length == 1 && parameters[0].ParameterType.Name == "AssemblyDefinition")
+            {
+                if (m.Name == "b" && m.ReturnType == typeof(string))
+                    bMethod = m;
+                else if (m.Name == "c" && m.ReturnType == typeof(bool))
+                    cMethod = m;
+            }
+        }
+
+        if (bMethod == null) throw new InvalidOperationException("Crestron sandbox hash generator (f.b) not found");
+        string sandboxHash = (string)bMethod.Invoke(fInstance, new object[] { definition });
+
+        MethodReference constructorReference = definition.MainModule.Import(constructor);
+        CustomAttribute customAttribute = new CustomAttribute(constructorReference);
+        customAttribute.ConstructorArguments.Add(new CustomAttributeArgument(definition.MainModule.TypeSystem.String, sandboxHash));
+        definition.CustomAttributes.Add(customAttribute);
+
+        if (cMethod != null)
+        {
+            bool valid = (bool)cMethod.Invoke(fInstance, new object[] { definition });
+            if (!valid) throw new InvalidOperationException("Crestron sandbox validation failed for dynamic hash: " + sandboxHash);
+        }
+
+        Console.WriteLine("sandboxHash=" + sandboxHash);
+    }
+
+    private static void Patch(string assemblyPath, string cecilPath, string customAttributesPath, string mvidText, string servicesPath, string compilerPath, string cresdbPath)
+    {
+        if (!File.Exists(assemblyPath)) throw new FileNotFoundException("Assembly", assemblyPath);
+        if (!File.Exists(cecilPath)) throw new FileNotFoundException("Mono.Cecil", cecilPath);
+        if (!File.Exists(customAttributesPath)) throw new FileNotFoundException("SimplSharpCustomAttributesInterface", customAttributesPath);
+        if (!File.Exists(servicesPath)) throw new FileNotFoundException("SIMPLSharp services", servicesPath);
+        if (!File.Exists(compilerPath)) throw new FileNotFoundException("CSharpCompiler", compilerPath);
+        if (!Directory.Exists(cresdbPath)) throw new DirectoryNotFoundException("Cresdb: " + cresdbPath);
+
+        RegisterResolver(compilerPath, servicesPath, null, cecilPath);
+        Assembly cecilAssembly = typeof(AssemblyDefinition).Assembly;
+        Type assemblyDefinitionType = cecilAssembly.GetType("Mono.Cecil.AssemblyDefinition", true);
+        MethodInfo readAssembly = assemblyDefinitionType.GetMethod("ReadAssembly", new[] { typeof(string) });
+        AssemblyDefinition definition = (AssemblyDefinition)readAssembly.Invoke(null, new object[] { Path.GetFullPath(assemblyPath) });
+        AssemblyDefinition sdk = (AssemblyDefinition)readAssembly.Invoke(null, new object[] { Path.GetFullPath(customAttributesPath) });
+        TypeDefinition attributeType = sdk.MainModule.GetType("Crestron.SandboxCustomAttributes.AssemblyInfoAttribute");
+        if (attributeType == null) throw new InvalidOperationException("Sandbox AssemblyInfoAttribute not found");
+
+        MethodDefinition constructor = null;
+        for (int index = 0; index < attributeType.Methods.Count; index++)
+        {
+            MethodDefinition candidate = attributeType.Methods[index];
+            if (candidate.Name == ".ctor" && candidate.Parameters.Count == 1)
+            {
+                constructor = candidate;
+                break;
+            }
+        }
+        if (constructor == null) throw new InvalidOperationException("Sandbox AssemblyInfoAttribute(string) not found");
+
+        for (int index = definition.CustomAttributes.Count - 1; index >= 0; index--)
+        {
+            if (definition.CustomAttributes[index].AttributeType.FullName == "Crestron.SandboxCustomAttributes.AssemblyInfoAttribute")
+                definition.CustomAttributes.RemoveAt(index);
+        }
+
+        string workDir = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
+        ApplySandboxAttribute(definition, constructor, servicesPath, compilerPath, cresdbPath, workDir);
+
+        AssemblyNameReference desktopMscorlib = null;
+        for (int index = 0; index < definition.MainModule.AssemblyReferences.Count; index++)
+        {
+            AssemblyNameReference reference = definition.MainModule.AssemblyReferences[index];
+            if (reference.Name == "mscorlib" && reference.Version == new Version(2, 0, 0, 0))
+            {
+                desktopMscorlib = reference;
+                break;
+            }
+        }
+        if (desktopMscorlib == null)
+        {
+            desktopMscorlib = new AssemblyNameReference("mscorlib", new Version(2, 0, 0, 0));
+            desktopMscorlib.PublicKeyToken = new byte[] { 0xb7, 0x7a, 0x5c, 0x56, 0x19, 0x34, 0xe0, 0x89 };
+            definition.MainModule.AssemblyReferences.Add(desktopMscorlib);
+        }
+        desktopMscorlib.Culture = string.Empty;
+        Guid mvid = new Guid(mvidText);
+        definition.MainModule.Mvid = mvid;
+        string implementationDetailsName = "<PrivateImplementationDetails>{" + mvid.ToString("D").ToUpperInvariant() + "}";
+        for (int index = 0; index < definition.MainModule.Types.Count; index++)
+        {
+            TypeDefinition type = definition.MainModule.Types[index];
+            if (type.Name.StartsWith("<PrivateImplementationDetails>", StringComparison.Ordinal))
+                type.Name = implementationDetailsName;
+        }
+        string normalizedPath = Path.GetFullPath(assemblyPath);
+        definition.Write(normalizedPath);
+        NormalizePeTimestamp(normalizedPath);
+    }
+
+    private static void PatchLegacy(string assemblyPath, string cecilPath, string customAttributesPath, string mvidText)
     {
         if (!File.Exists(assemblyPath)) throw new FileNotFoundException("Assembly", assemblyPath);
         if (!File.Exists(cecilPath)) throw new FileNotFoundException("Mono.Cecil", cecilPath);
@@ -90,7 +227,7 @@ internal static class Signer
         }
         MethodReference constructorReference = definition.MainModule.Import(constructor);
         CustomAttribute customAttribute = new CustomAttribute(constructorReference);
-        customAttribute.ConstructorArguments.Add(new CustomAttributeArgument(definition.MainModule.TypeSystem.String, SandboxHash));
+        customAttribute.ConstructorArguments.Add(new CustomAttributeArgument(definition.MainModule.TypeSystem.String, FallbackSandboxHash));
         definition.CustomAttributes.Add(customAttribute);
 
         AssemblyNameReference desktopMscorlib = null;

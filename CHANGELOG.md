@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-24
+
+### Fixed
+
+- **Dynamic 3-Series Sandbox Hash Computation:** Fixed fatal SIMPL+ compilation failure (`Error 106: assembly is not within the sandbox`) when targeting 3-Series (`\target series3`) with assemblies whose name is not `SIMPLatform.SimplSharp`. `Signer.cs` now dynamically computes the authentic encrypted sandbox fingerprint via `Crestron.Tools.SIMPLSharp.Services.dll` (`f::b`) for the target assembly and asserts validity with Crestron's own validator (`f::c`) during the patch stage instead of injecting a static hardcoded hash.
+
 ## [1.2] - 2026-08-26
 
 First publicized update since 1.0.0; includes everything shipped in the
