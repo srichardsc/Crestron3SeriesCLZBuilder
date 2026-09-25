@@ -38,4 +38,3 @@ class CliTests(unittest.TestCase):
         with patch("crestron_clz_builder.menu.run_interactive_menu", return_value=0) as mock_menu:
             self.assertEqual(main(["--interactive"]), 0)
             mock_menu.assert_called_once()
-

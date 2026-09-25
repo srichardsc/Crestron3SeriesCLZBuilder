@@ -13,7 +13,7 @@ This document lists the maintainers of `Crestron3SeriesCLZBuilder`.
 
 ## Governance & Becoming a Maintainer
 
-We welcome contributions from the Crestron and AV automation community! 
+We welcome contributions from the Crestron and AV automation community!
 
 If you are interested in becoming a maintainer or core contributor:
 1. Active participation in code reviews and issue discussions is required.
