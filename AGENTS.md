@@ -9,4 +9,4 @@
 - **Empaquetado del binario** `clz-builder.exe` (`build-exe/`, spec de PyInstaller) y releases en `dist-exe/`.
 - **Docs de uso, build, CI y configuración** (`docs/`: FOR-DUMMIES, BUILD, CI, CONFIGURATION, etc.) y changelog.
 
-> Este repo NO contiene drivers C# de Crestron Home (ver `InfinityBridgeDriver`/`crestron-home-drivers`), ni el servidor MCP (ver `crestron-home-mcp`).
+> Los productos InfinityBridge viven en `../infinitybridge/crestron/` (Home Driver, SIMPLAccess y SIMPLink); consulta su [arquitectura](../infinitybridge/crestron/docs/architecture.md) al ajustar la integración del builder. Los drivers accesorios siguen en `../crestron-home-drivers/` y el MCP en `../crestron-home-mcp/`.
